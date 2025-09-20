@@ -6,6 +6,8 @@ import json
 import os
 from itertools import product
 import requests
+import datetime
+import db_operations
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,10 +19,11 @@ logging.basicConfig(
 )
 
 class MachineMiner:
-    def __init__(self, username: str, password: str):
-        self.brain = ml.WorldQuantBrain(username, password)
+    def __init__(self, username: str, password: str, level: str):
+        self.brain = ml.WorldQuantBrain(username, password, level)
         self.alpha_bag = []
         self.gold_bag = []
+        self.database = db_operations.DataBaseOp()
         
     def mine_alphas(self, region="USA", universe="TOP3000"):
         logging.info(f"Starting machine alpha mining for region: {region}, universe: {universe}")
@@ -75,6 +78,168 @@ class MachineMiner:
             json.dump(results, f, indent=2)
         logging.info(f"Results saved to machine_results_{timestamp}.json")
 
+    def batch_run(self):
+        # region='USA'
+        # universe='TOP3000'
+        # region='GLB'
+        # universe='TOPDIV3000'
+        universe='MINVOL1M'
+        region='ASI'
+        # universe='ILLIQUID_MINVOL1M'
+        delay=1
+        neutralize='SUBINDUSTRY'
+        # neutralize='SLOW_AND_FAST'
+        # neutralize='FAST'
+        # template =True
+        template =False
+        pool_size=8
+        dataset_id="fundamental17"
+        dataset_prefix="fnd17"
+        dataset_dsc="Direct Fundamental Data"
+        # dataset_cat="Risk"
+        dataset_cat="Fundamental"
+        # dataset_cat="Analyst"
+        # field_count = self.brain.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)
+        field_count = 1
+        count = 0
+        offset = 48
+        step = 2
+        if field_count < step:
+            step = field_count
+        for i in range(offset, field_count, step):
+            count = count + step
+            self.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size)
+            offset = offset + step
+
+    def simulate_run(self, dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count=100, offset=0, region='USA',universe='TOP3000',delay=1,neutralize='SUBINDUSTRY',template =False, pool_size=7):
+        logging.info(f"开始运行:{dataset_id},{dataset_prefix},{dataset_dsc},{dataset_cat},{count},{offset}, {region},{universe},{delay},{neutralize},{template}, {pool_size}")
+        # 获取字段
+        pc_fields = self.simulate_fields(region=region,universe=universe,delay=delay, dataset_id=dataset_id,count=count, offset=offset)
+        if template:
+            # 生成模板表达式-一阶
+            first_order = self.first_order_factory_template(pc_fields)
+        else:
+            # 生成表达式-一阶
+            first_order = self.brain.get_first_order(pc_fields, self.brain.ops_set)
+
+        #赋予alpha表达式一个初始decay
+        init_decay =6
+        fo_alpha_list = []
+        for alpha in first_order:
+            fo_alpha_list.append((alpha, init_decay))
+
+        # 划分任务池  
+        fo_pools = self.brain.load_task_pool(fo_alpha_list, 10, pool_size)
+        # 一二三阶运行相同的编号
+        sim_batch = int(time.time())
+        # 一阶运行开始记录
+        start_time_one = datetime.datetime.now() - datetime.timedelta(hours=12)
+        start_time_one_str = start_time_one.strftime("%Y-%m-%d %H:%M:%S")
+        sim_data_one = {"batch_time": sim_batch, "start_time": start_time_one_str, "order_seq": 1, "dataset": dataset_id, "dataset_dsc": dataset_dsc, "dataset_cat": dataset_cat, "region": region, "universe": universe, "delay": delay, "neutralize": neutralize, "field_offset": offset, "field_count": count, "alpha_count": len(first_order), "multi_sum": pool_size, "pool": len(fo_pools), "template": None}
+
+        self.database.save_simulate_record(sim_data_one)
+        # 一阶运行
+        self.brain.multi_simulate(fo_pools, neutralize, region, universe, 0)
+        # 一阶运行结束记录
+        end_time_one = datetime.datetime.now() - datetime.timedelta(hours=12)
+        end_time_one_str = end_time_one.strftime("%Y-%m-%d %H:%M:%S")
+        sim_data_one_update = {"end_time": end_time_one_str}
+        self.database.update_simulate_record(sim_data_one_update, sim_batch, 1)
+        # 二阶运行
+        sec_res = self.simulate_run_second_order(start_time_one_str,end_time_one_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+        if (sec_res[0]==0):
+            return
+        # 三阶运行
+        self.simulate_run_third_order(sec_res[1],sec_res[2],dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+
+    
+
+    def simulate_run_second_order(self, start_time_one_str,end_time_one_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7):
+        # 筛选一阶alpha
+        fo_tracker = self.brain.my_get_alphas(start_time_one_str.replace(" ","T"),end_time_one_str.replace(" ","T"), 0.5, 0.4, region, 100,"track", True, "")
+        if(len(fo_tracker)==0):
+            logging.info("筛选一阶alpha数量：%s"%len(fo_tracker))
+            return (len(fo_tracker),"","")
+        # 剪枝
+        fo_layer=self.brain.prune(fo_tracker,dataset_prefix,5)
+        # 生成二阶alpha
+        so_alpha_list = []
+        group_ops = ["group_neutralize", "group_rank", "group_zscore"]
+        for expr, decay in fo_layer:
+            for alpha in self.brain.get_group_second_order_factory([expr], group_ops, region):
+                so_alpha_list.append((alpha, decay))
+        print(len(so_alpha_list))
+        so_pools = self.brain.load_task_pool(so_alpha_list, 10, pool_size)
+        # 二阶运行开始记录
+        start_time = datetime.datetime.now() - datetime.timedelta(hours=12)
+        start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        # 将一阶参数设置成2阶参数
+        sim_data["start_time"]=start_time_str
+        sim_data["order_seq"]=2
+        sim_data["alpha_count"]=len(so_alpha_list)
+        sim_data["pool"]=len(so_pools)
+        self.database.save_simulate_record(sim_data)
+        # 二阶运行
+        self.brain.multi_simulate(so_pools, neutralize, region, universe, 0)
+        # 二阶运行结束记录
+        end_time = datetime.datetime.now() - datetime.timedelta(hours=12)
+        end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        sim_data_update = {"end_time": end_time_str}
+        self.database.update_simulate_record(sim_data_update, sim_data["batch_time"], 2)
+        return (len(so_alpha_list),start_time_str,end_time_str)
+
+    def simulate_run_third_order(self, start_time_sec_str,end_time_sec_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7):
+        # 筛选2阶alpha
+        fo_tracker = self.brain.my_get_alphas(start_time_sec_str.replace(" ","T"),end_time_sec_str.replace(" ","T"), 1.4, 0.7, region, 100,"track", True, "")
+        if(len(fo_tracker)==0):
+            logging.info("筛选2阶alpha数量：%s"%len(fo_tracker))
+            return len(fo_tracker)
+        # 剪枝
+        fo_layer=self.brain.prune(fo_tracker,dataset_prefix,5)
+        # 生成三阶alpha
+        th_alpha_list=[]
+        for expr,decay in fo_layer:
+            for alpha in self.brain.trade_when_factory("trade_when",expr,region):
+                th_alpha_list.append((alpha,decay))
+        print(len(th_alpha_list))
+        so_pools = self.brain.load_task_pool(th_alpha_list, 10, pool_size)
+        # 三阶运行开始记录
+        start_time = datetime.datetime.now() - datetime.timedelta(hours=12)
+        start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        # 将参数设置成3阶参数
+        sim_data["start_time"]=start_time_str
+        sim_data["order_seq"]=3
+        sim_data["alpha_count"]=len(th_alpha_list)
+        self.database.save_simulate_record(sim_data)
+        # 3阶运行
+        self.brain.multi_simulate(so_pools, neutralize, region, universe, 0)
+        # 3阶运行结束记录
+        end_time = datetime.datetime.now() - datetime.timedelta(hours=12)
+        end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        sim_data_update = {"end_time": end_time_str}
+        self.database.update_simulate_record(sim_data_update, sim_data["batch_time"], 3)
+        return len(th_alpha_list)
+
+    def simulate_fields(self, region,universe,delay, dataset_id,count=100, offset=0):
+        df = self.brain.get_datafields(region=region, universe=universe, delay=delay, dataset_id=dataset_id, count=count, offset=offset)
+        pc_fields = self.brain.process_datafields(df, True)
+        return pc_fields
+
+    def first_order_factory_template(fields):
+        alpha_set = []
+        days = [5,22,60,120,252]
+        #for field in fields:
+        for field in fields:
+        #reverse op does the work
+            # alpha_set.append(field)
+            #alpha_set.append("-%s"%field)
+            ## ts_delta(ts_delta(x,d),d) 加速因子
+            for day in days:
+                alpha = "(%s - ts_mean(%s, %s)) / ts_mean(%s, %s)"%(field,field, day,field, day)
+                alpha_set.append(alpha)
+            
+        return alpha_set
+
 def main():
     # Read credentials from credential.txt
     try:
@@ -82,14 +247,15 @@ def main():
             credentials = json.load(f)
         username = credentials[0]
         password = credentials[1]
+        level = credentials[2]
     except (FileNotFoundError, json.JSONDecodeError, IndexError) as e:
         raise ValueError(f"Error reading credentials from credential.txt: {e}")
     
     if not username or not password:
         raise ValueError("Invalid credentials in credential.txt")
         
-    miner = MachineMiner(username, password)
-    miner.mine_alphas()
+    miner = MachineMiner(username, password, level)
+    miner.batch_run()
 
 if __name__ == "__main__":
     main() 

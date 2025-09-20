@@ -11,26 +11,48 @@ from itertools import combinations
 from collections import defaultdict
 import pickle
 import logging
+import threading
+from requests import Response
+import concurrent
+import concurrent.futures
+from tqdm import tqdm
 
-arsenal = ["ts_moment", "ts_entropy", "ts_min_max_cps", "ts_min_max_diff", "inst_tvr", 'sigmoid', 
+arsenal_E = ["ts_moment", "ts_entropy", "ts_min_max_cps", "ts_min_max_diff", "inst_tvr", 'sigmoid', 
            "ts_decay_exp_window", "ts_percentage", "vector_neut", "vector_proj", "signed_power"]
 
-group_ops = ["group_rank", "group_sum", "group_max", "group_mean", "group_median", "group_min", "group_std_dev"]
+arsenal_G = ["inst_tvr", 
+           "ts_decay_exp_window", "vector_neut", "signed_power"]
+
+group_ops_E = ["group_rank", "group_sum", "group_max", "group_mean", "group_median", "group_min", "group_std_dev"]
+group_ops_G = ["group_rank",  "group_mean", "group_median"]
 
 twin_field_ops = ["ts_corr", "ts_covariance", "ts_co_kurtosis", "ts_co_skewness", "ts_theilsen"]
-
 class WorldQuantBrain:
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str, level: str):
         self.username = username
         self.password = password
+        self.level = level
         self.session = None
-        self.basic_ops = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "log_diff", "s_log_1p",
+        self.basic_ops_E = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "log_diff", "s_log_1p",
                          'fraction', 'quantile', "normalize", "scale_down"]
-        self.ts_ops = ["ts_rank", "ts_zscore", "ts_delta", "ts_sum", "ts_product",
+        self.basic_ops_G = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "s_log_1p",
+                         'fraction', 'quantile', "normalize", ]
+        self.ts_ops_E = ["ts_rank", "ts_zscore", "ts_delta", "ts_sum", "ts_product", "ts_delay",
                       "ts_ir", "ts_std_dev", "ts_mean", "ts_arg_min", "ts_arg_max", "ts_min_diff",
                       "ts_max_diff", "ts_returns", "ts_scale", "ts_skewness", "ts_kurtosis",  
                       "ts_quantile"]
-        self.ops_set = self.basic_ops + self.ts_ops + arsenal + group_ops
+        self.ts_ops_G = ["ts_rank", "ts_zscore", "ts_delta", "ts_sum", "ts_product", "ts_delay",
+                       "ts_std_dev", "ts_mean", "ts_arg_min", "ts_arg_max", 
+                        "ts_scale",  
+                      "ts_quantile"]
+        if self.level == "G":
+            self.ops_set = self.basic_ops_G + self.ts_ops_G + arsenal_G + group_ops_G
+        elif self.level == "E":
+            self.ops_set = self.basic_ops_E + self.ts_ops_E + arsenal_E + group_ops_E
+        elif self.level == "M":
+            self.ops_set = self.basic_ops_E + self.ts_ops_E + arsenal_E + group_ops_E
+        elif self.level == "GM":
+            self.ops_set = self.basic_ops_E + self.ts_ops_E + arsenal_E + group_ops_E
         self.login()
 
     def login(self):
@@ -116,22 +138,26 @@ class WorldQuantBrain:
 
     def generate_sim_data(self, alpha_list, region, uni, neut):
         sim_data_list = []
+        maxTrade = 'OFF'
+        if region == 'ASI':
+            maxTrade = 'ON'
         for alpha, decay in alpha_list:
             simulation_data = {
                 'type': 'REGULAR',
                 'settings': {
                     'instrumentType': 'EQUITY',
-                    'region': 'USA',
-                    'universe': 'TOP3000',
+                    'region': region,
+                    'universe': uni,
                     'delay': 1,
-                    'decay': 0,
-                    'neutralization': 'INDUSTRY',
+                    'decay': decay,
+                    'neutralization': neut,
                     'truncation': 0.08,
                     'pasteurization': 'ON',
                     'unitHandling': 'VERIFY',
                     'nanHandling': 'OFF',
                     'language': 'FASTEXPR',
                     'visualization': False,
+                    'maxTrade': maxTrade,
                 },
                 'regular': alpha}
 
@@ -149,8 +175,10 @@ class WorldQuantBrain:
         fitness = metrics["is"]["fitness"]
         turnover = metrics["is"]["turnover"]
         margin = metrics["is"]["margin"]
+        decay = metrics["settings"]["decay"]
+        exp = metrics['regular']['code']
         
-        triple = [sharpe, fitness, turnover, margin, dateCreated]
+        triple = [sharpe, fitness, turnover, margin, dateCreated, alpha_id, exp, decay]
     
         return triple
 
@@ -233,8 +261,14 @@ class WorldQuantBrain:
             return "error"
             
     def get_vec_fields(self, fields):
-
-        vec_ops = ["vec_avg", "vec_sum", "vec_ir", "vec_max", "vec_count","vec_skewness","vec_stddev", "vec_choose"]
+        if self.level == 'G':
+            vec_ops = ["vec_avg", "vec_sum", "vec_count"]
+        elif self.level == 'E':
+            vec_ops = ["vec_avg", "vec_sum", "vec_ir", "vec_max", "vec_count","vec_skewness","vec_stddev", "vec_choose"]
+        elif self.level == 'M':
+            vec_ops = ["vec_avg", "vec_sum", "vec_ir", "vec_max", "vec_count","vec_skewness","vec_stddev", "vec_choose"]
+        elif self.level == 'GM':
+            vec_ops = ["vec_avg", "vec_sum", "vec_ir", "vec_max", "vec_count","vec_skewness","vec_stddev", "vec_choose"]
         vec_fields = []
      
         for field in fields:
@@ -253,25 +287,31 @@ class WorldQuantBrain:
         delay: int = 1,
         universe: str = 'TOP3000',
         dataset_id: str = '',
-        search: str = ''
+        search: str = '',
+        count: int = 100,
+        offset: int = 0,
     ):
+        step = 50
+        if(count - offset<step):
+            step = count - offset
         if len(search) == 0:
-            url_template = "https://api.worldquantbrain.com/data-fields?" +\
-                f"&instrumentType={instrument_type}" +\
-                f"&region={region}&delay={str(delay)}&universe={universe}&dataset.id={dataset_id}&limit=50" +\
-                "&offset={x}"
-            count = self.session.get(url_template.format(x=0)).json()['count'] 
-            
+            url_template = (
+                "https://api.worldquantbrain.com/data-fields?"
+                + f"instrumentType={instrument_type}"
+                + f"&region={region}&delay={str(delay)}&universe={universe}&dataset.id={dataset_id}&limit={step}"
+                + "&offset={x}"
+            )
         else:
-            url_template = "https://api.worldquantbrain.com/data-fields?" +\
-                f"&instrumentType={instrument_type}" +\
-                f"&region={region}&delay={str(delay)}&universe={universe}&limit=50" +\
-                f"&search={search}" +\
-                "&offset={x}"
-            count = 100
+            url_template = (
+                "https://api.worldquantbrain.com/data-fields?"
+                + f"instrumentType={instrument_type}"
+                + f"&region={region}&delay={str(delay)}&universe={universe}&limit={step}"
+                + f"&search={search}"
+                + "&offset={x}"
+            )
         
         datafields_list = []
-        for x in range(0, count, 50):
+        for x in range(offset, count, step):
             datafields = self.session.get(url_template.format(x=x))
             datafields_list.append(datafields.json()['results'])
      
@@ -279,29 +319,61 @@ class WorldQuantBrain:
      
         datafields_df = pd.DataFrame(datafields_list_flat)
         return datafields_df
+    
+    def get_datafields_count(
+        s,
+        instrument_type: str = "EQUITY",
+        region: str = "USA",
+        delay: int = 1,
+        universe: str = "TOP3000",
+        dataset_id: str = "",
+        search: str = "",
+    ):
+        if len(search) == 0:
+            url_template = (
+                "https://api.worldquantbrain.com/data-fields?"
+                + f"instrumentType={instrument_type}"
+                + f"&region={region}&delay={str(delay)}&universe={universe}&dataset.id={dataset_id}&limit=1"
+                + "&offset=0"
+            )
+        else:
+            url_template = (
+                "https://api.worldquantbrain.com/data-fields?"
+                + f"instrumentType={instrument_type}"
+                + f"&region={region}&delay={str(delay)}&universe={universe}&limit=1"
+                + f"&search={search}"
+                + "&offset=0"
+            )
+            
+        datafields = s.get(url_template)
+        return datafields.json()["count"]
 
-    def process_datafields(self, df, data_type):
-
-        if data_type == "matrix":
-            datafields = df[df['type'] == "MATRIX"]["id"].tolist()
-        elif data_type == "vector":
-            datafields = self.get_vec_fields(df[df['type'] == "VECTOR"]["id"].tolist())
-
-        tb_fields = []
-        for field in datafields:
-            tb_fields.append("winsorize(ts_backfill(%s, 120), std=4)"%field)
-        return tb_fields
+    def process_datafields(self, df, backfill: bool = False):
+        datafields = []
+        datafields += df[df['type'] == "MATRIX"]["id"].tolist()
+        datafields += self.get_vec_fields(df[df['type'] == "VECTOR"]["id"].tolist())
+        if backfill:
+            # return ["winsorize(ts_backfill(%s,120),std=4)" % field for field in datafields]
+            tb_fields = []
+            for field in datafields:
+                tb_fields.append("winsorize(ts_backfill(%s, 120), std=4)"%field)
+                tb_fields.append(field)
+            return tb_fields
+        else:
+            return datafields
+        
      
     def view_alphas(self, gold_bag):
         sharp_list = []
         for gold, pc in gold_bag:
 
             triple = self.locate_alpha(gold)
-            info = [triple[2], triple[3], triple[4], triple[5], triple[6], triple[1]]
+            # triple = [sharpe, fitness, turnover, margin, dateCreated, alpha_id, exp, decay]
+            info = [triple[0], triple[1], triple[2], triple[3], triple[4], triple[5], triple[6]]
             info.append(pc)
             sharp_list.append(info)
 
-        sharp_list.sort(reverse=True, key = lambda x : x[3])
+        sharp_list.sort(reverse=True, key = lambda x : x[0])
         for i in sharp_list:
             print(i)
      
@@ -377,33 +449,215 @@ class WorldQuantBrain:
         output_dict = {"next" : next_alphas, "decay" : decay_alphas}
         print("count: %d"%count)
         return output_dict
-     
+    
+    ## filter_flag：控制是否执行厂字alpha筛除
+    ## other_params: 拼接的查询参数，如 '&pnl>10000000'
+    def my_get_alphas(self, start_date, end_date, sharpe_th, fitness_th, region, alpha_num, usage, filter_flag, other_params = ''):
+        
+        next_alphas = []
+        decay_alphas = []
+        result_list = []
+        # 3E large 3C less
+        count = 0
+        step = 100
+        if alpha_num < step:
+            step = alpha_num
+        url_e = ("https://api.worldquantbrain.com/users/self/alphas?"
+                    +f"limit={step}"
+                    + "&offset={x}"
+                    + f"&status=UNSUBMITTED%1FIS_FAIL&dateCreated%3E={start_date}"
+                    + f"-04:00&dateCreated%3C{end_date}"
+                    + f"-04:00&is.fitness%3E{str(fitness_th)}&is.sharpe%3E{str(sharpe_th) }"
+                    + f"&settings.region={region}&order=-is.sharpe&hidden=false&type!=SUPER{other_params}")
+        url_c = ("https://api.worldquantbrain.com/users/self/alphas?"
+                    +f"limit={step}"
+                    + "&offset={x}"
+                    + f"&status=UNSUBMITTED%1FIS_FAIL&dateCreated%3E={start_date}"
+                    + f"-04:00&dateCreated%3C{end_date}"
+                    + f"-04:00&is.fitness%3C-{str(fitness_th)}&is.sharpe%3C-{str(sharpe_th) }"
+                    + f"&settings.region={region}&order=is.sharpe&hidden=false&type!=SUPER{other_params}")
+        urls = [url_e]
+        if usage != "submit":
+            urls.append(url_c)
+        for url in urls:
+            for i in range(0, alpha_num, step):
+                response = self.session.get(url.format(x=i))
+                # print(url)
+                # print(response.json())
+                try:
+                    alpha_list = response.json()["results"]
+                    #print(response.json())
+                    if(len(alpha_list) <= 0):
+                        break
+                    for j in range(len(alpha_list)):
+                        alpha_id = alpha_list[j]["id"]
+                        name = alpha_list[j]["name"]
+                        dateCreated = alpha_list[j]["dateCreated"]
+                        sharpe = alpha_list[j]["is"]["sharpe"]
+                        fitness = alpha_list[j]["is"]["fitness"]
+                        turnover = alpha_list[j]["is"]["turnover"]
+                        margin = alpha_list[j]["is"]["margin"]
+                        longCount = alpha_list[j]["is"]["longCount"]
+                        shortCount = alpha_list[j]["is"]["shortCount"]
+                        decay = alpha_list[j]["settings"]["decay"]
+                        exp = alpha_list[j]['regular']['code']
+                        count += 1
+
+                        if usage != "submit":
+                            if (longCount + shortCount) > 100:
+                                if sharpe < -sharpe_th:
+                                    exp = "-%s"%exp
+                                if turnover > 0.7:
+                                    decay=decay*4
+                                elif turnover > 0.6:
+                                    decay=decay*3+3
+                                elif turnover > 0.5:
+                                    decay=decay*3
+                                elif turnover > 0.4:
+                                    decay=decay*2
+                                elif turnover > 0.35:
+                                    decay=decay+4
+                                elif turnover > 0.3:
+                                    decay=decay+2
+                                alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay}
+                                result_list.append(alpha_data)
+                        else:
+                            checks = alpha_list[j]["is"]["checks"]
+                            pass_flag = True
+                            for check in checks:
+                                if check["result"] == "FAIL":
+                                    pass_flag = False
+                            if pass_flag:
+                                alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay}
+                                result_list.append(alpha_data)
+                                # print(alpha_data)
+                except Exception as e:
+                    print(f"{i} finished re-login: {str(e)}")
+                    self.login()
+
+        final_result = []
+        if filter_flag:
+            print('######### 筛除厂子形alpha #########')
+            removed_alpha_ids = []
+            lock = threading.Lock()  # 线程锁，防止数据竞争
+
+            if len(result_list) > 1000:
+                print('    alpha数量超1000，避免限流，未执行筛除...')
+            else:
+                total_alphas = len(result_list)
+                print(f'    alpha数量 {total_alphas}，开始执行筛除（多线程）...')
+
+                def process_alpha(rec):
+                    zero_year_sharp = 0
+                    try:
+                        response = self.wait_get(f'https://api.worldquantbrain.com/alphas/{rec["id"]}/recordsets/yearly-stats')
+                        if response.status_code == 200:
+                            yearly_status = response.json()['records']
+                            for year_data in yearly_status:
+                                if year_data[6] == 0:
+                                    zero_year_sharp += 1
+                        else:
+                            print(f"    获取alpha {rec['id']} 年度统计信息失败，状态码: {response.status_code}")
+                    except Exception as e:
+                        print(f"    处理alpha {rec['id']} 时发生异常: {str(e)}")
+                    
+                    with lock:  # 确保线程安全
+                        if zero_year_sharp <= 3:
+                            final_result.append(rec)
+                        else:
+                            removed_alpha_ids.append(rec['id'])
+
+                # 使用 ThreadPoolExecutor 并行处理
+                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:  # 调整 max_workers 控制并发数
+                    list(tqdm(
+                        executor.map(process_alpha, result_list),
+                        total=total_alphas,
+                        desc="筛除进度",
+                        ncols=100
+                    ))
+
+                print(f'    筛除完成，筛除 alpha_ids: {removed_alpha_ids}')
+            print('######### 筛除厂子形alpha #########')
+        else:
+            final_result = result_list
+
+        print("count: %d"%count)
+        print("pass_count: %d"%len(final_result))
+        return final_result
+    
+    def wait_get(self, url: str, max_retries: int = 10) -> "Response":
+        """
+        发送带有重试机制的 GET 请求，直到成功或达到最大重试次数。
+        此函数会根据服务器返回的 `Retry-After` 头信息进行等待，并在遇到 401 状态码时重新初始化配置。
+        
+        Args:
+            url (str): 目标 URL。
+            max_retries (int, optional): 最大重试次数，默认为 10。
+        
+        Returns:
+            Response: 请求的响应对象。
+        """
+        retries = 0
+        while retries < max_retries:
+            while True:
+                simulation_progress = self.session.get(url)
+                if simulation_progress.headers.get("Retry-After", 0) == 0:
+                    break
+                time.sleep(float(simulation_progress.headers["Retry-After"]))
+            if simulation_progress.status_code < 400:
+                break
+            else:
+                time.sleep(2 ** retries)
+                retries += 1
+        return simulation_progress
+    
     def transform(self, next_alpha_recs, region):
         output = []
         for rec in next_alpha_recs:
             
-            decay = rec[-1]
-            exp = rec[1]
+            decay = rec['decay']
+            exp = rec['exp']
             output.append([exp,decay])
         output_dict = {region : output}
         return output_dict
 
+    # def prune(self, next_alpha_recs, region, prefix, keep_num):
+    #     # prefix is the datafield prefix, fnd6, mdl175 ...
+    #     # keep_num is the num of top sharpe same-datafield alpha
+    #     output = []
+    #     num_dict = defaultdict(int)
+    #     for rec in next_alpha_recs:
+    #         exp = rec[1]
+    #         field = exp.split(prefix)[-1].split(",")[0]
+    #         sharpe = rec[2]
+    #         if sharpe < 0:
+    #             field = "-%s"%field
+    #         if num_dict[field] < keep_num:
+    #             num_dict[field] += 1
+    #             decay = rec[-1]
+    #             exp = rec[1]
+    #             output.append([exp,decay])
+    #     output_dict = {region : output}
+    #     return output_dict
+    
+      ## 剪枝
     def prune(self, next_alpha_recs, region, prefix, keep_num):
         # prefix is the datafield prefix, fnd6, mdl175 ...
-        # keep_num is the num of top sharpe same-datafield alpha
+        # keep num is the num of top sharpe same-datafield alpha
         output = []
         num_dict = defaultdict(int)
         for rec in next_alpha_recs:
-            exp = rec[1]
+            # print(rec)
+            exp = rec['exp']
             field = exp.split(prefix)[-1].split(",")[0]
-            sharpe = rec[2]
+            sharpe = rec['sharpe']
             if sharpe < 0:
                 field = "-%s"%field
             if num_dict[field] < keep_num:
                 num_dict[field] += 1
-                decay = rec[-1]
-                exp = rec[1]
-                output.append([exp,decay])
+                decay=rec['decay']
+                exp = rec['exp']
+                output.append ([exp,decay])
         output_dict = {region : output}
         return output_dict
 
@@ -508,7 +762,8 @@ class WorldQuantBrain:
         open_events = ["ts_arg_max(volume, 5) == 0", "ts_corr(close, volume, 20) < 0",
                        "ts_corr(close, volume, 5) < 0", "ts_mean(volume,10)>ts_mean(volume,60)",
                        "group_rank(ts_std_dev(returns,60), sector) > 0.7", "ts_zscore(returns,60) > 2",
-                       "ts_skewness(returns,120)> 0.7", "ts_arg_min(volume, 5) > 3",
+                    #    "ts_skewness(returns,120)> 0.7", 
+                       "ts_arg_min(volume, 5) > 3",
                        "ts_std_dev(returns, 5) > ts_std_dev(returns, 20)",
                        "ts_arg_max(close, 5) == 0", "ts_arg_max(close, 20) == 0",
                        "ts_corr(close, volume, 5) > 0", "ts_corr(close, volume, 5) > 0.3", "ts_corr(close, volume, 5) > 0.5",
@@ -516,9 +771,15 @@ class WorldQuantBrain:
                        "ts_regression(returns, %s, 5, lag = 0, rettype = 2) > 0"%field,
                        "ts_regression(returns, %s, 20, lag = 0, rettype = 2) > 0"%field,
                        "ts_regression(returns, ts_step(20), 20, lag = 0, rettype = 2) > 0",
-                       "ts_regression(returns, ts_step(5), 5, lag = 0, rettype = 2) > 0"]
+                       "ts_regression(returns, ts_step(5), 5, lag = 0, rettype = 2) > 0",
+                       "ts_corr(close,volume,20) > 0.1",
+                        "volume>adv20",
+                        "(volume>adv20) && (ts_corr(close,volume,20) > 0.1)",
+                        "(close>ts_mean(close,90))&&(volume>ts_mean(volume,90))",
+                        "(close>ts_mean(close,10))&&(volume>ts_mean(volume,10))"]
 
-        exit_events = ["abs(returns) > 0.1", "-1", "days_from_last_change(ern3_pre_reptime) > 20"]
+        # exit_events = ["abs(returns) > 0.1", "-1", "days_from_last_change(ern3_pre_reptime) > 20"]
+        exit_events = ["abs(returns) > 0.1", "-1"]
 
         usa_events = ["rank(rp_css_business) > 0.8", "ts_rank(rp_css_business, 22) > 0.8", "rank(vec_avg(mws82_sentiment)) > 0.8",
                       "ts_rank(vec_avg(mws82_sentiment),22) > 0.8", "rank(vec_avg(nws48_ssc)) > 0.8",
@@ -564,8 +825,24 @@ class WorldQuantBrain:
                       "ts_rank(vec_avg(mdl109_news_sent_1m),22) > 0.8",
                       "rank(rp_ess_business) > 0.8",
                       "ts_rank(rp_ess_business,22) > 0.8"]
+        
+        open_events_all = open_events
+        if region == "USA":
+            open_events_all += usa_events
+        elif region == "EUR":
+            open_events_all += eur_events
+        elif region == "ASI":
+            open_events_all += asi_events
+        elif region == "GLB":
+            open_events_all += glb_events
+        elif region == "CHN":
+            open_events_all += chn_events
+        elif region == "KOR":
+            open_events_all += kor_events
+        elif region == "TWN":
+            open_events_all += twn_events
 
-        for oe in open_events:
+        for oe in open_events_all:
             for ee in exit_events:
                 alpha = "%s(%s, %s, %s)"%(op, oe, field, ee)
                 output.append(alpha)
@@ -838,7 +1115,7 @@ class WorldQuantBrain:
         
         return output
 
-    def load_task_pool(self, alpha_list: list, batch_size: int = 10, concurrent_batches: int = 10) -> list:
+    def load_task_pool(self, alpha_list: list, batch_size: int = 10, concurrent_batches: int = 8) -> list:
         """Split alpha list into pools of batches for concurrent processing."""
         pools = []
         current_pool = []
