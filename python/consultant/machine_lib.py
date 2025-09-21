@@ -86,7 +86,7 @@ class WorldQuantBrain:
             for y, task in enumerate(pool):
                 sim_data_list = self.generate_sim_data(task, region, universe, neut)
                 logging.info(f"Generated simulation data for task {y+1}/{len(pool)}")
-                logging.info(f"Simulation data: {sim_data_list}")
+                # logging.info(f"Simulation data: {sim_data_list}")
                 try:
                     simulation_response = self.session.post('https://api.worldquantbrain.com/simulations', 
                                                          json=sim_data_list)
@@ -321,7 +321,7 @@ class WorldQuantBrain:
         return datafields_df
     
     def get_datafields_count(
-        s,
+        self,
         instrument_type: str = "EQUITY",
         region: str = "USA",
         delay: int = 1,
@@ -345,7 +345,7 @@ class WorldQuantBrain:
                 + "&offset=0"
             )
             
-        datafields = s.get(url_template)
+        datafields = self.session.get(url_template)
         return datafields.json()["count"]
 
     def process_datafields(self, df, backfill: bool = False):
