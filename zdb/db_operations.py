@@ -1,3 +1,7 @@
+import sys
+import os
+# 将当前文件所在目录添加到Python搜索路径，确保同一目录下的模块可以被正确导入
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import db_helper
 from typing import Dict, Any, Tuple
 

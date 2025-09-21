@@ -36,7 +36,7 @@ class WorldQuantBrain:
         self.basic_ops_E = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "log_diff", "s_log_1p",
                          'fraction', 'quantile', "normalize", "scale_down"]
         self.basic_ops_G = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "s_log_1p",
-                         'fraction', 'quantile', "normalize", ]
+                         'quantile', "normalize", ]
         self.ts_ops_E = ["ts_rank", "ts_zscore", "ts_delta", "ts_sum", "ts_product", "ts_delay",
                       "ts_ir", "ts_std_dev", "ts_mean", "ts_arg_min", "ts_arg_max", "ts_min_diff",
                       "ts_max_diff", "ts_returns", "ts_scale", "ts_skewness", "ts_kurtosis",  
@@ -86,7 +86,7 @@ class WorldQuantBrain:
             for y, task in enumerate(pool):
                 sim_data_list = self.generate_sim_data(task, region, universe, neut)
                 logging.info(f"Generated simulation data for task {y+1}/{len(pool)}")
-                
+                logging.info(f"Simulation data: {sim_data_list}")
                 try:
                     simulation_response = self.session.post('https://api.worldquantbrain.com/simulations', 
                                                          json=sim_data_list)
@@ -661,7 +661,7 @@ class WorldQuantBrain:
         output_dict = {region : output}
         return output_dict
 
-    def get_first_order(self, vec_fields, ops_set):
+    def get_first_order(self, vec_fields, ops_set, region):
         alpha_set = []
         for field in vec_fields:
             alpha_set.append(field)
@@ -679,7 +679,7 @@ class WorldQuantBrain:
                 elif op.startswith("ts_") or op == "inst_tvr":
                     alpha_set += self.ts_factory(op, field)
                 elif op.startswith("group_"):
-                    alpha_set += self.group_factory(op, field, "usa")
+                    alpha_set += self.group_factory(op, field, region)
                 elif op.startswith("vector"):
                     alpha_set += self.vector_factory(op, field)
                 elif op == "signed_power":
@@ -947,19 +947,16 @@ class WorldQuantBrain:
         
         usa_group_2 = ['sta2_top3000_fact3_c50','sta2_top3000_fact4_c20','sta2_top3000_fact4_c10']
         
-        usa_group_3 = ['sta3_2_sector', 'sta3_3_sector', 'sta3_news_sector', 'sta3_peer_sector',
-                       'sta3_pvgroup1_sector', 'sta3_pvgroup2_sector', 'sta3_pvgroup3_sector', 'sta3_sec_sector']
+        # usa_group_3 = ['sta3_2_sector', 'sta3_3_sector', 'sta3_news_sector', 'sta3_peer_sector', 'sta3_pvgroup1_sector', 'sta3_pvgroup2_sector', 'sta3_pvgroup3_sector', 'sta3_sec_sector']
         
-        usa_group_4 = ['rsk69_01c_1m', 'rsk69_57c_1m', 'rsk69_02c_2m', 'rsk69_5c_2m', 'rsk69_02c_1m',
-                       'rsk69_05c_2m', 'rsk69_57c_2m', 'rsk69_5c_1m', 'rsk69_05c_1m', 'rsk69_01c_2m']
+        # usa_group_4 = ['rsk69_01c_1m', 'rsk69_57c_1m', 'rsk69_02c_2m', 'rsk69_5c_2m', 'rsk69_02c_1m', 'rsk69_05c_2m', 'rsk69_57c_2m', 'rsk69_5c_1m', 'rsk69_05c_1m', 'rsk69_01c_2m']
         
         usa_group_5 = ['anl52_2000_backfill_d1_05c', 'anl52_3000_d1_05c', 'anl52_3000_backfill_d1_02c', 
                        'anl52_3000_backfill_d1_5c', 'anl52_3000_backfill_d1_05c', 'anl52_3000_d1_5c']
         
-        usa_group_6 = ['mdl10_group_name']
+        # usa_group_6 = ['mdl10_group_name']
         
-        usa_group_7 = ['oth171_region_sector_long_d1_sector', 'oth171_region_sector_short_d1_sector', 
-                       'oth171_sector_long_d1_sector', 'oth171_sector_short_d1_sector']
+        # usa_group_7 = ['oth171_region_sector_long_d1_sector', 'oth171_region_sector_short_d1_sector', 'oth171_sector_long_d1_sector', 'oth171_sector_short_d1_sector']
         
         usa_group_8 = ['oth455_competitor_n2v_p10_q50_w1_kmeans_cluster_10',
                          'oth455_customer_n2v_p10_q50_w5_kmeans_cluster_10',
@@ -980,7 +977,6 @@ class WorldQuantBrain:
         asi_group_8 = ['oth455_partner_roam_w3_pca_fact1_cluster_5',
                        'oth455_relation_roam_w3_pca_fact1_cluster_20',
                        'oth455_relation_roam_w3_kmeans_cluster_20',
-                       'oth455_relation_n2v_p10_q200_w5_pca_fact1_cluster_20',
                        'oth455_relation_n2v_p10_q200_w5_pca_fact1_cluster_20',
                        'oth455_competitor_n2v_p10_q200_w1_kmeans_cluster_10']
         
@@ -1034,20 +1030,18 @@ class WorldQuantBrain:
                          'oth455_relation_n2v_p10_q200_w2_pca_fact2_cluster_20', 
                          'oth455_competitor_roam_w2_pca_fact3_cluster_20']
         
-        glb_group_13 = ["pv13_10_f2_g3_sector", "pv13_2_f3_g2_sector", "pv13_2_sector", "pv13_52_all_delay_1_sector"]
+        # glb_group_13 = ["pv13_10_f2_g3_sector", "pv13_2_f3_g2_sector", "pv13_2_sector", "pv13_52_all_delay_1_sector"]
         
-        glb_group_3 = ['sta3_2_sector', 'sta3_3_sector', 'sta3_news_sector', 'sta3_peer_sector',
-                       'sta3_pvgroup1_sector', 'sta3_pvgroup2_sector', 'sta3_pvgroup3_sector', 'sta3_sec_sector']
+        # glb_group_3 = ['sta3_2_sector', 'sta3_3_sector', 'sta3_news_sector', 'sta3_peer_sector', 'sta3_pvgroup1_sector', 'sta3_pvgroup2_sector', 'sta3_pvgroup3_sector', 'sta3_sec_sector']
         
         glb_group_1 = ['sta1_allc20', 'sta1_allc10', 'sta1_allc50', 'sta1_allc5']
         
-        glb_group_2 = ['sta2_all_fact4_c50', 'sta2_all_fact4_c20', 'sta2_all_fact3_c20', 'sta2_all_fact4_c10']
+        # glb_group_2 = ['sta2_all_fact4_c50', 'sta2_all_fact4_c20', 'sta2_all_fact3_c20', 'sta2_all_fact4_c10']
         
         glb_group_13 = ['pv13_2_sector', 'pv13_10_sector', 'pv13_3l_scibr', 'pv13_2l_scibr', 'pv13_1l_scibr',
                         'pv13_52_minvol_1m_all_delay_1_sector','pv13_52_minvol_1m_sector','pv13_52_minvol_1m_sector']
         
-        glb_group_7 = ['oth171_region_sector_long_d1_sector', 'oth171_region_sector_short_d1_sector', 
-                       'oth171_sector_long_d1_sector', 'oth171_sector_short_d1_sector']  
+        # glb_group_7 = ['oth171_region_sector_long_d1_sector', 'oth171_region_sector_short_d1_sector', 'oth171_sector_long_d1_sector', 'oth171_sector_short_d1_sector']  
         
         glb_group_8 = ['oth455_relation_n2v_p10_q200_w5_kmeans_cluster_5',
                          'oth455_relation_n2v_p10_q50_w2_kmeans_cluster_5',
@@ -1069,8 +1063,7 @@ class WorldQuantBrain:
                        'oth455_competitor_n2v_p50_q50_w1_kmeans_cluster_10',
                        'oth455_competitor_n2v_p50_q200_w5_kmeans_cluster_10']
         
-        group_3 = ["oth171_region_sector_long_d1_sector", "oth171_region_sector_short_d1_sector",
-                   "oth171_sector_long_d1_sector", "oth171_sector_short_d1_sector"]
+        # group_3 = ["oth171_region_sector_long_d1_sector", "oth171_region_sector_short_d1_sector", "oth171_sector_long_d1_sector", "oth171_sector_short_d1_sector"]
         
         bps_group = "bucket(rank(fnd28_value_05480/close), range='0.2, 1, 0.2')"
         cap_group = "bucket(rank(cap), range='0.1, 1, 0.1')"
@@ -1079,26 +1072,26 @@ class WorldQuantBrain:
         
         groups = ["market","sector", "industry", "subindustry", bps_group, cap_group, sector_cap_group]
         
-        if region == "chn":
-            groups += chn_group_13 + chn_group_1 + chn_group_2 + group_3 
-        if region == "twn":
+        if region == "CHN":
+            groups += chn_group_13 + chn_group_1 + chn_group_2 #+ group_3 
+        if region == "TWN":
             groups += twn_group_13 + twn_group_1 + twn_group_2 + twn_group_8 
-        if region == "asi":
+        if region == "ASI":
             groups += asi_group_13 + asi_group_1 + asi_group_8 
-        if region == "usa":
-            groups += usa_group_13 + usa_group_1 + usa_group_2 + usa_group_3 + usa_group_4 + usa_group_8 + group_3 
-            groups += usa_group_5 + usa_group_6 + usa_group_7
-        if region == "hkg":
+        if region == "USA":
+            groups += usa_group_13 + usa_group_1 + usa_group_2 + usa_group_8 # + usa_group_3 + usa_group_4  + group_3 
+            groups += usa_group_5 #+ usa_group_6 + usa_group_7
+        if region == "HKG":
             groups += hkg_group_13 + hkg_group_1 + hkg_group_2 + hkg_group_8
-        if region == "kor":
+        if region == "KOR":
             groups += kor_group_13 + kor_group_1 + kor_group_2 + kor_group_8
-        if region == "eur": 
-            groups += eur_group_13 + eur_group_1 + eur_group_2 + eur_group_3 + eur_group_8 +  eur_group_7 + group_3 
-        if region == "glb":
-            groups += glb_group_13 + glb_group_8 + glb_group_3 + glb_group_1 + glb_group_7 + group_3
-        if region == "amr":
+        if region == "EUR": 
+            groups += eur_group_13 + eur_group_1 + eur_group_2 + eur_group_3 + eur_group_8 +  eur_group_7 #+ group_3 
+        if region == "GLB":
+            groups += glb_group_13 + glb_group_8 + glb_group_1 #+ glb_group_7 + glb_group_3 + group_3
+        if region == "AMR":
             groups += amr_group_3 + amr_group_13
-        if region == "jpn":
+        if region == "JPN":
             groups += jpn_group_1 + jpn_group_2 + jpn_group_13 + jpn_group_8
             
         for group in groups:

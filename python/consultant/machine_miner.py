@@ -1,29 +1,88 @@
-import machine_lib as ml
 from time import sleep
 import time
 import logging
+from logging.handlers import TimedRotatingFileHandler
 import json
 import os
 from itertools import product
 import requests
 import datetime
-import db_operations
+import sys
+# 修复导入语句，确保zdb目录在Python路径中
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('machine_mining.log'),
-        logging.StreamHandler()
-    ]
-)
+# 导入所需模块
+import zdb.db_operations
+import python.consultant.machine_lib as ml  # 正确导入machine_lib模块并使用ml别名
+
+# 创建log文件夹（如果不存在）
+log_dir = os.path.join(project_root, 'log')
+os.makedirs(log_dir, exist_ok=True)
+
+# 配置日志，输出到log文件夹下，并确保编码为utf-8
+# 检查是否已经配置了日志处理器，避免重复配置
+if len(logging.root.handlers) == 0:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            TimedRotatingFileHandler(os.path.join(log_dir, 'machine_mining.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+
+# 确保程序退出时正确关闭日志文件
+def setup_logging_shutdown_hook():
+    import atexit
+    import signal
+    import threading
+    
+    # 创建锁以确保线程安全
+    log_lock = threading.RLock()
+    
+    def close_loggers():
+        with log_lock:
+            # 确保所有日志都被刷新和关闭
+            for handler in logging.root.handlers[:]:
+                try:
+                    handler.flush()
+                    handler.close()
+                except Exception as e:
+                    # 即使出现错误也继续关闭其他处理器
+                    print(f"Error closing logger handler: {e}", file=sys.stderr)
+    
+    # 注册程序退出钩子
+    atexit.register(close_loggers)
+    
+    # 注册信号处理函数
+    def signal_handler(sig, frame):
+        print(f"收到信号 {sig}，正在优雅关闭...", file=sys.stderr)
+        close_loggers()
+        sys.exit(0)
+    
+    # 处理更多类型的信号
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler) # 终止信号
+    
+    # 在Windows上可能不支持以下信号，但不会导致错误
+    try:
+        signal.signal(signal.SIGABRT, signal_handler)  # 异常终止信号
+        signal.signal(signal.SIGQUIT, signal_handler)  # 退出信号
+    except (AttributeError, ValueError):
+        pass
+
+# 设置日志关闭钩子
+setup_logging_shutdown_hook()
+
 
 class MachineMiner:
     def __init__(self, username: str, password: str, level: str):
         self.brain = ml.WorldQuantBrain(username, password, level)
         self.alpha_bag = []
         self.gold_bag = []
-        self.database = db_operations.DataBaseOp()
+        self.database = zdb.db_operations.DataBaseOp()
         
     def mine_alphas(self, region="USA", universe="TOP3000"):
         logging.info(f"Starting machine alpha mining for region: {region}, universe: {universe}")
@@ -41,7 +100,7 @@ class MachineMiner:
                 
                 # Generate first order alphas
                 logging.info("Generating first order alphas...")
-                first_order = self.brain.get_first_order(vector_fields + matrix_fields, self.brain.ops_set)
+                first_order = self.brain.get_first_order(vector_fields + matrix_fields, self.brain.ops_set, region)
                 logging.info(f"Generated {len(first_order)} first order alphas")
                 logging.info(f"Sample alphas: {first_order[:3]}")
                 
@@ -78,39 +137,6 @@ class MachineMiner:
             json.dump(results, f, indent=2)
         logging.info(f"Results saved to machine_results_{timestamp}.json")
 
-    def batch_run(self):
-        # region='USA'
-        # universe='TOP3000'
-        # region='GLB'
-        # universe='TOPDIV3000'
-        universe='MINVOL1M'
-        region='ASI'
-        # universe='ILLIQUID_MINVOL1M'
-        delay=1
-        neutralize='SUBINDUSTRY'
-        # neutralize='SLOW_AND_FAST'
-        # neutralize='FAST'
-        # template =True
-        template =False
-        pool_size=8
-        dataset_id="fundamental17"
-        dataset_prefix="fnd17"
-        dataset_dsc="Direct Fundamental Data"
-        # dataset_cat="Risk"
-        dataset_cat="Fundamental"
-        # dataset_cat="Analyst"
-        # field_count = self.brain.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)
-        field_count = 1
-        count = 0
-        offset = 48
-        step = 2
-        if field_count < step:
-            step = field_count
-        for i in range(offset, field_count, step):
-            count = count + step
-            self.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size)
-            offset = offset + step
-
     def simulate_run(self, dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count=100, offset=0, region='USA',universe='TOP3000',delay=1,neutralize='SUBINDUSTRY',template =False, pool_size=7):
         logging.info(f"开始运行:{dataset_id},{dataset_prefix},{dataset_dsc},{dataset_cat},{count},{offset}, {region},{universe},{delay},{neutralize},{template}, {pool_size}")
         # 获取字段
@@ -120,7 +146,7 @@ class MachineMiner:
             first_order = self.first_order_factory_template(pc_fields)
         else:
             # 生成表达式-一阶
-            first_order = self.brain.get_first_order(pc_fields, self.brain.ops_set)
+            first_order = self.brain.get_first_order(pc_fields, self.brain.ops_set, region)
 
         #赋予alpha表达式一个初始decay
         init_decay =6
@@ -240,22 +266,5 @@ class MachineMiner:
             
         return alpha_set
 
-def main():
-    # Read credentials from credential.txt
-    try:
-        with open('credential.txt', 'r') as f:
-            credentials = json.load(f)
-        username = credentials[0]
-        password = credentials[1]
-        level = credentials[2]
-    except (FileNotFoundError, json.JSONDecodeError, IndexError) as e:
-        raise ValueError(f"Error reading credentials from credential.txt: {e}")
-    
-    if not username or not password:
-        raise ValueError("Invalid credentials in credential.txt")
-        
-    miner = MachineMiner(username, password, level)
-    miner.batch_run()
-
-if __name__ == "__main__":
-    main() 
+    def get_datafields_count(self, region,universe,delay, dataset_id):
+        return self.brain.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)

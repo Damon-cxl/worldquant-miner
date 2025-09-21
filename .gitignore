@@ -18,6 +18,7 @@ results/
 
 credential.txt
 
+log/
 *.log
 .env
 *batch_*.html
