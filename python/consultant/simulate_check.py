@@ -118,7 +118,7 @@ class CheckSubmission:
             return
         self.brain.check_submission(stone_bag, check_bag, 0, tags=[tag])
         logging.info(f"check_submission: {tag} {region} {len(stone_bag)} {len(check_bag)}")
-        logging.info(f"check_submission: {check_bag}")
+        # logging.info(f"check_submission: {check_bag}")
         
 
 

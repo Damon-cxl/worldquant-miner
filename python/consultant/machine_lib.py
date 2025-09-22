@@ -241,6 +241,7 @@ class WorldQuantBrain:
                 gold_bag.append((g, pc))
                 # 设置alpha的属性
                 self.set_alpha_properties(g, name="check_submission", tags=tags, regular_desc=self.desc)
+                logging.info(f"check_pass: {g} {pc}")
         logging.info(f"check_submission depot: {depot}")
         return gold_bag
 
