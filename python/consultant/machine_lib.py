@@ -203,13 +203,15 @@ class WorldQuantBrain:
             "tags": tags,
             "category": None,
             "regular": {"description": regular_desc},
-            "combo": {"description": combo_desc},
-            "selection": {"description": selection_desc},
+            # "combo": {"description": combo_desc},
+            # "selection": {"description": selection_desc},
         }
         try:
             response = self.session.patch(
                 "https://api.worldquantbrain.com/alphas/" + alpha_id, json=params
             )
+            # print(alpha_id)
+            # print(response.json())
         except Exception as e:
             self.logger.error(f"set_alpha_properties {alpha_id} error: {str(e)}")
             return
@@ -241,7 +243,7 @@ class WorldQuantBrain:
             else:
                 gold_bag.append((g, pc))
                 # 设置alpha的属性
-                self.set_alpha_properties(g, name="check_submission", tags=tags, regular_desc=self.desc)
+                self.set_alpha_properties(g, name=None, tags=tags, regular_desc=self.desc)
                 self.logger.info(f"check_pass: {g} {pc}")
         self.logger.info(f"check_submission depot: {depot}")
         return gold_bag
@@ -249,7 +251,7 @@ class WorldQuantBrain:
     def get_check_submission(self, alpha_id):
         while True:
             # 设置alpha的属性
-            self.set_alpha_properties(alpha_id, name="check_submission", tags=["Checking"], regular_desc=self.desc)
+            self.set_alpha_properties(alpha_id, name=None, tags=["Checking"], regular_desc=self.desc)
             # Check
             result = self.session.get("https://api.worldquantbrain.com/alphas/" + alpha_id + "/check")
             if "retry-after" in result.headers:

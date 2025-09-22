@@ -1,7 +1,7 @@
 from time import sleep
 import time
 import logging
-from logger.handlers import TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 import json
 import os
 import requests
@@ -109,8 +109,8 @@ class CheckSubmission:
 
     def check_alpha_region(self, region: str, start_time: str, end_time: str, sharp: float, fit: float, tag: str, other_para: str):
         th_tracker=self.brain.my_get_alphas(start_time, end_time, sharp, fit, region, 200,"submit", True, other_para)
+        self.logger.info(f"check_alpha_region_get: {tag} {region} {len(th_tracker)}")
         if th_tracker is None or len(th_tracker) == 0:
-            self.logger.info(f"check_alpha_region_get: {tag} {region} {len(th_tracker)}")
             return
         #将get的alpha的id取出至stone_bag,用apicheck submission
         stone_bag = []
@@ -119,8 +119,8 @@ class CheckSubmission:
             if len(alpha['tags']) > 0:
                 continue
             stone_bag.append(alpha['id'])
+        self.logger.info(f"check_alpha_region_get_filt_tag: {tag} {region} {len(stone_bag)}")
         if len(stone_bag) == 0:
-            self.logger.info(f"check_alpha_region_get_no_tag: {tag} {region} {len(stone_bag)}")
             return
         self.brain.check_submission(stone_bag, check_bag, 0, tags=[tag])
         self.logger.info(f"check_submission: {tag} {region} {len(stone_bag)} {len(check_bag)}")

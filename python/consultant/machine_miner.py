@@ -1,7 +1,7 @@
 from time import sleep
 import time
 import logging
-from self.logger.handlers import TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 import json
 import os
 from itertools import product

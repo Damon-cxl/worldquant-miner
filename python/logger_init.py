@@ -21,8 +21,10 @@ def get_module_logger(module_name, log_dir, log_name=None, log_level=logging.INF
         # 3. 创建文件处理器 - 使用TimedRotatingFileHandler实现日志轮转
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
-        log_name = "ALL.txt"
-        if log_name is not None:
+        
+        if log_name is None:
+            log_name = "ALL"
+        else:
             log_name = log_name + ".txt"
         file_handler = TimedRotatingFileHandler(
             filename=os.path.join(log_dir, log_name),

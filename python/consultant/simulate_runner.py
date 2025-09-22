@@ -7,7 +7,7 @@ import os
 import requests
 import datetime
 import sys
-from python.logger_init import get_module_logger
+
 # 修复导入语句，确保zdb目录在Python路径中
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if project_root not in sys.path:
@@ -15,6 +15,7 @@ if project_root not in sys.path:
 
 # 导入machine_miner模块
 from python.consultant import machine_miner
+from python.logger_init import get_module_logger
 
 # 创建log文件夹（如果不存在）
 log_dir = os.path.join(project_root, 'log')
@@ -105,8 +106,8 @@ def batch_run():
     # dataset_cat="Analyst"
     field_count = global_miner.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)
     # field_count = 1
-    count = 0
-    offset = 0
+    count = 2
+    offset = 2
     step = 2
     if field_count < step:
         step = field_count
