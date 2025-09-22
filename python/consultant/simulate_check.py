@@ -14,6 +14,7 @@ if project_root not in sys.path:
 
 # 导入machine_miner模块
 from python.consultant import machine_miner
+import python.consultant.machine_lib as ml
 
 # 创建log文件夹（如果不存在）
 log_dir = os.path.join(project_root, 'log')
@@ -24,7 +25,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        TimedRotatingFileHandler(os.path.join(log_dir, 'simulate_runner.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
+        TimedRotatingFileHandler(os.path.join(log_dir, 'simulate_check.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -72,51 +73,58 @@ def setup_logging_shutdown_hook():
 # 设置日志关闭钩子
 setup_logging_shutdown_hook()
 
+class CheckSubmission:
+    def __init__(self, username: str, password: str, level: str):
+        self.brain = ml.WorldQuantBrain(username, password, level)
+        self.alpha_bag = []
+        self.gold_bag = []
+        self.region_list = ["USA", "GLB", "ASI"]
+        self.tags = ["SharpFit2","Sharp2","MayPPA"]
 
-# 定义全局miner变量，可在整个文件中访问
-# 这是使类实例全局可用的一种方式
-global_miner = None
+    def check_alpha(self):
+        start_time = "2025-09-16T00:00:00"
+        end_time = "2025-09-17T00:00:00"
+        other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        for region in self.region_list:
+            for tag in self.tags:
+                if tag == "SharpFit2":
+                    sharp = 2
+                    fit = 2
+                elif tag == "Sharp2":
+                    sharp = 2
+                    fit = 1
+                    other_para += "&is.fitness%3C2"
+                elif tag == "MayPPA":
+                    sharp = 1.1
+                    fit = 0
+                    other_para += "&is.sharpe%3C2&is.fitness%3C1"
+                self.check_alpha_region(region, start_time, end_time, sharp, fit, tag, other_para)
+        
 
-def batch_run():
-    # 函数通过参数接收miner实例
-    # region='USA'
-    # universe='TOP3000'
-    # region='GLB'
-    # universe='TOPDIV3000'
-    universe='MINVOL1M'
-    region='ASI'
-    # universe='ILLIQUID_MINVOL1M'
-    delay=1
-    neutralize='SUBINDUSTRY'
-    # neutralize='SLOW_AND_FAST'
-    # neutralize='FAST'
-    # template =True
-    template =False
-    pool_size=7
-    dataset_id="fundamental17"
-    dataset_prefix="fnd17"
-    dataset_dsc="Direct Fundamental Data"
-    # dataset_cat="Risk"
-    dataset_cat="Fundamental"
-    # dataset_cat="Analyst"
-    field_count = global_miner.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)
-    # field_count = 1
-    count = 0
-    offset = 0
-    step = 2
-    if field_count < step:
-        step = field_count
-    for i in range(offset, field_count, step):
-        count = count + step
-        global_miner.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size)
-        offset = offset + step
+    def check_alpha_region(self, region: str, start_time: str, end_time: str, sharp: float, fit: float, tag: str, other_para: str):
+        th_tracker=self.brain.my_get_alphas(start_time, end_time, sharp, fit, region, 200,"submit", True, other_para)
+        if th_tracker is None or len(th_tracker) == 0:
+            logging.info(f"check_alpha_region_get: {tag} {region} {len(th_tracker)}")
+            return
+        #将get的alpha的id取出至stone_bag,用apicheck submission
+        stone_bag = []
+        check_bag = []
+        for alpha in th_tracker:
+            if len(alpha['tags']) > 0:
+                continue
+            stone_bag.append(alpha['id'])
+        if len(stone_bag) == 0:
+            logging.info(f"check_alpha_region_get_no_tag: {tag} {region} {len(stone_bag)}")
+            return
+        self.brain.check_submission(stone_bag, check_bag, 0, tags=[tag])
+        logging.info(f"check_submission: {tag} {region} {len(stone_bag)} {len(check_bag)}")
+        logging.info(f"check_submission: {check_bag}")
+        
 
 
 # 在main函数中初始化并使用
 
 def main():
-    global global_miner  # 声明使用全局变量
-    
     # Read credentials from credential.txt
     try:
         with open(project_root + '/credential.txt', 'r') as f:
@@ -135,8 +143,8 @@ def main():
     # batch_run(miner)
     
     # 方法2: 创建实例并赋值给全局变量（可选实现）
-    global_miner = machine_miner.MachineMiner(username, password, level)
-    batch_run()
+    check = CheckSubmission(username, password, level)
+    check.check_alpha()
 
 if __name__ == "__main__":
     main()

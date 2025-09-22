@@ -33,6 +33,7 @@ class WorldQuantBrain:
         self.password = password
         self.level = level
         self.session = None
+        self.desc =  "Idea: \nThis alpha identifies stocks with extreme negative debt service ratio trends, neutralized by relation-based cluster effects. It targets stocks with the most extreme negative 180-day quantile rankings within their relation-based clusters. The strategy is based on the premise that stocks with extreme negative debt service characteristics, when adjusted for relation-based cluster factors, may indicate potential mispricing.\nRationale for data used: \noth450_mfm_gem3_dsrt\nThis debt service ratio data field measures a company's ability to service its debt obligations. Low values suggest difficulty in meeting debt obligations, while high values indicate strong capacity to service debt. By focusing on this metric, this alpha targets stocks with extreme debt service characteristics.\nRationale for operators used: \nts_quantile(..., 180)\nCalculates the quantile ranking of debt service ratio values over a 180-day window, capturing long-term debt service ratio patterns. This operator transforms absolute values into relative rankings from 0 to 1, enabling comparison across stocks with different scales."
         self.basic_ops_E = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "log_diff", "s_log_1p",
                          'fraction', 'quantile', "normalize", "scale_down"]
         self.basic_ops_G = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "s_log_1p",
@@ -186,9 +187,10 @@ class WorldQuantBrain:
         alpha_id,
         name: str = None,
         color: str = None,
-        selection_desc: str = "None",
-        combo_desc: str = "None",
+        selection_desc: str = None,
+        combo_desc: str = None,
         tags: str = ["ace_tag"],
+        regular_desc: str = None,
     ):
         """
         Function changes alpha's description parameters
@@ -199,15 +201,19 @@ class WorldQuantBrain:
             "name": name,
             "tags": tags,
             "category": None,
-            "regular": {"description": None},
+            "regular": {"description": regular_desc},
             "combo": {"description": combo_desc},
             "selection": {"description": selection_desc},
         }
-        response = self.session.patch(
-            "https://api.worldquantbrain.com/alphas/" + alpha_id, json=params
-        )
+        try:
+            response = self.session.patch(
+                "https://api.worldquantbrain.com/alphas/" + alpha_id, json=params
+            )
+        except Exception as e:
+            logging.error(f"set_alpha_properties {alpha_id} error: {str(e)}")
+            return
     
-    def check_submission(self, alpha_bag, gold_bag, start):
+    def check_submission(self, alpha_bag, gold_bag, start, tags: list = None):
         depot = []
         for idx, g in enumerate(alpha_bag):
             if idx < start:
@@ -232,13 +238,17 @@ class WorldQuantBrain:
             elif pc == "error":
                 depot.append(g)
             else:
-                print(g)
                 gold_bag.append((g, pc))
-        print(depot)
+                # 设置alpha的属性
+                self.set_alpha_properties(g, name="check_submission", tags=tags, regular_desc=self.desc)
+        logging.info(f"check_submission depot: {depot}")
         return gold_bag
 
     def get_check_submission(self, alpha_id):
         while True:
+            # 设置alpha的属性
+            self.set_alpha_properties(alpha_id, name="check_submission", tags=["Checking"], regular_desc=self.desc)
+            # Check
             result = self.session.get("https://api.worldquantbrain.com/alphas/" + alpha_id + "/check")
             if "retry-after" in result.headers:
                 time.sleep(float(result.headers["Retry-After"]))
@@ -459,29 +469,36 @@ class WorldQuantBrain:
         result_list = []
         # 3E large 3C less
         count = 0
-        step = 100
-        if alpha_num < step:
-            step = alpha_num
+        
         url_e = ("https://api.worldquantbrain.com/users/self/alphas?"
-                    +f"limit={step}"
+                    +"limit={limit}"
                     + "&offset={x}"
                     + f"&status=UNSUBMITTED%1FIS_FAIL&dateCreated%3E={start_date}"
                     + f"-04:00&dateCreated%3C{end_date}"
-                    + f"-04:00&is.fitness%3E{str(fitness_th)}&is.sharpe%3E{str(sharpe_th) }"
+                    + f"-04:00&is.fitness%3E={str(fitness_th)}&is.sharpe%3E={str(sharpe_th) }"
                     + f"&settings.region={region}&order=-is.sharpe&hidden=false&type!=SUPER{other_params}")
         url_c = ("https://api.worldquantbrain.com/users/self/alphas?"
-                    +f"limit={step}"
+                    +"limit={limit}"
                     + "&offset={x}"
                     + f"&status=UNSUBMITTED%1FIS_FAIL&dateCreated%3E={start_date}"
                     + f"-04:00&dateCreated%3C{end_date}"
-                    + f"-04:00&is.fitness%3C-{str(fitness_th)}&is.sharpe%3C-{str(sharpe_th) }"
+                    + f"-04:00&is.fitness%3C=-{str(fitness_th)}&is.sharpe%3C=-{str(sharpe_th) }"
                     + f"&settings.region={region}&order=is.sharpe&hidden=false&type!=SUPER{other_params}")
         urls = [url_e]
         if usage != "submit":
             urls.append(url_c)
         for url in urls:
+            if usage == "submit":
+                # 提交Check时，获取总数循环处理
+                count_response = self.session.get(url.format(x=0, limit=1))
+                alpha_num = count_response.json()["count"]
+                if alpha_num == 0:
+                    continue
+            step = 100
+            if alpha_num < step:
+                step = alpha_num
             for i in range(0, alpha_num, step):
-                response = self.session.get(url.format(x=i))
+                response = self.session.get(url.format(x=i, limit=step))
                 # print(url)
                 # print(response.json())
                 try:
@@ -492,6 +509,7 @@ class WorldQuantBrain:
                     for j in range(len(alpha_list)):
                         alpha_id = alpha_list[j]["id"]
                         name = alpha_list[j]["name"]
+                        tags = alpha_list[j]['tags']
                         dateCreated = alpha_list[j]["dateCreated"]
                         sharpe = alpha_list[j]["is"]["sharpe"]
                         fitness = alpha_list[j]["is"]["fitness"]
@@ -519,7 +537,7 @@ class WorldQuantBrain:
                                     decay=decay+4
                                 elif turnover > 0.3:
                                     decay=decay+2
-                                alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay}
+                                alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay,'tags':tags}
                                 result_list.append(alpha_data)
                         else:
                             checks = alpha_list[j]["is"]["checks"]
@@ -528,7 +546,7 @@ class WorldQuantBrain:
                                 if check["result"] == "FAIL":
                                     pass_flag = False
                             if pass_flag:
-                                alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay}
+                                alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay,'tags':tags}
                                 result_list.append(alpha_data)
                                 # print(alpha_data)
                 except Exception as e:
@@ -658,8 +676,8 @@ class WorldQuantBrain:
                 decay=rec['decay']
                 exp = rec['exp']
                 output.append ([exp,decay])
-        output_dict = {region : output}
-        return output_dict
+        # output_dict = {region : output}
+        return output
 
     def get_first_order(self, vec_fields, ops_set, region):
         alpha_set = []
