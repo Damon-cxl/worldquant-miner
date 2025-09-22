@@ -7,6 +7,7 @@ import os
 import requests
 import datetime
 import sys
+from python.logger_init import get_module_logger
 # 修复导入语句，确保zdb目录在Python路径中
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if project_root not in sys.path:
@@ -19,58 +20,61 @@ from python.consultant import machine_miner
 log_dir = os.path.join(project_root, 'log')
 os.makedirs(log_dir, exist_ok=True)
 
-# 配置日志，输出到log文件夹下，并确保编码为utf-8
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        TimedRotatingFileHandler(os.path.join(log_dir, 'simulate_runner.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+# 获取模块级别的logger
+logger = get_module_logger(__name__, log_dir, 'sim_runner',logging.INFO)
 
-# 确保程序退出时正确关闭日志文件
-def setup_logging_shutdown_hook():
-    import atexit
-    import signal
-    import threading
-    
-    # 创建锁以确保线程安全
-    log_lock = threading.RLock()
-    
-    def close_loggers():
-        with log_lock:
-            # 确保所有日志都被刷新和关闭
-            for handler in logging.root.handlers[:]:
-                try:
-                    handler.flush()
-                    handler.close()
-                except Exception as e:
-                    # 即使出现错误也继续关闭其他处理器
-                    print(f"Error closing logger handler: {e}", file=sys.stderr)
-    
-    # 注册程序退出钩子
-    atexit.register(close_loggers)
-    
-    # 注册信号处理函数
-    def signal_handler(sig, frame):
-        print(f"收到信号 {sig}，正在优雅关闭...", file=sys.stderr)
-        close_loggers()
-        sys.exit(0)
-    
-    # 处理更多类型的信号
-    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-    signal.signal(signal.SIGTERM, signal_handler) # 终止信号
-    
-    # 在Windows上可能不支持以下信号，但不会导致错误
-    try:
-        signal.signal(signal.SIGABRT, signal_handler)  # 异常终止信号
-        signal.signal(signal.SIGQUIT, signal_handler)  # 退出信号
-    except (AttributeError, ValueError):
-        pass
+# # 配置日志，输出到log文件夹下，并确保编码为utf-8
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         TimedRotatingFileHandler(os.path.join(log_dir, 'simulate_runner.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
+#         logging.StreamHandler()
+#     ]
+# )
 
-# 设置日志关闭钩子
-setup_logging_shutdown_hook()
+# # 确保程序退出时正确关闭日志文件
+# def setup_logging_shutdown_hook():
+#     import atexit
+#     import signal
+#     import threading
+    
+#     # 创建锁以确保线程安全
+#     log_lock = threading.RLock()
+    
+#     def close_loggers():
+#         with log_lock:
+#             # 确保所有日志都被刷新和关闭
+#             for handler in logging.root.handlers[:]:
+#                 try:
+#                     handler.flush()
+#                     handler.close()
+#                 except Exception as e:
+#                     # 即使出现错误也继续关闭其他处理器
+#                     print(f"Error closing logger handler: {e}", file=sys.stderr)
+    
+#     # 注册程序退出钩子
+#     atexit.register(close_loggers)
+    
+#     # 注册信号处理函数
+#     def signal_handler(sig, frame):
+#         print(f"收到信号 {sig}，正在优雅关闭...", file=sys.stderr)
+#         close_loggers()
+#         sys.exit(0)
+    
+#     # 处理更多类型的信号
+#     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+#     signal.signal(signal.SIGTERM, signal_handler) # 终止信号
+    
+#     # 在Windows上可能不支持以下信号，但不会导致错误
+#     try:
+#         signal.signal(signal.SIGABRT, signal_handler)  # 异常终止信号
+#         signal.signal(signal.SIGQUIT, signal_handler)  # 退出信号
+#     except (AttributeError, ValueError):
+#         pass
+
+# # 设置日志关闭钩子
+# setup_logging_shutdown_hook()
 
 
 # 定义全局miner变量，可在整个文件中访问
@@ -135,7 +139,7 @@ def main():
     # batch_run(miner)
     
     # 方法2: 创建实例并赋值给全局变量（可选实现）
-    global_miner = machine_miner.MachineMiner(username, password, level)
+    global_miner = machine_miner.MachineMiner(username, password, level, logger)
     batch_run()
 
 if __name__ == "__main__":

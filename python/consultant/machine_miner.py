@@ -1,7 +1,7 @@
 from time import sleep
 import time
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from self.logger.handlers import TimedRotatingFileHandler
 import json
 import os
 from itertools import product
@@ -17,107 +17,49 @@ if project_root not in sys.path:
 import zdb.db_operations
 import python.consultant.machine_lib as ml  # 正确导入machine_lib模块并使用ml别名
 
-# 创建log文件夹（如果不存在）
-log_dir = os.path.join(project_root, 'log')
-os.makedirs(log_dir, exist_ok=True)
-
-# 配置日志，输出到log文件夹下，并确保编码为utf-8
-# 检查是否已经配置了日志处理器，避免重复配置
-if len(logging.root.handlers) == 0:
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            TimedRotatingFileHandler(os.path.join(log_dir, 'machine_mining.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
-
-# 确保程序退出时正确关闭日志文件
-def setup_logging_shutdown_hook():
-    import atexit
-    import signal
-    import threading
-    
-    # 创建锁以确保线程安全
-    log_lock = threading.RLock()
-    
-    def close_loggers():
-        with log_lock:
-            # 确保所有日志都被刷新和关闭
-            for handler in logging.root.handlers[:]:
-                try:
-                    handler.flush()
-                    handler.close()
-                except Exception as e:
-                    # 即使出现错误也继续关闭其他处理器
-                    print(f"Error closing logger handler: {e}", file=sys.stderr)
-    
-    # 注册程序退出钩子
-    atexit.register(close_loggers)
-    
-    # 注册信号处理函数
-    def signal_handler(sig, frame):
-        print(f"收到信号 {sig}，正在优雅关闭...", file=sys.stderr)
-        close_loggers()
-        sys.exit(0)
-    
-    # 处理更多类型的信号
-    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-    signal.signal(signal.SIGTERM, signal_handler) # 终止信号
-    
-    # 在Windows上可能不支持以下信号，但不会导致错误
-    try:
-        signal.signal(signal.SIGABRT, signal_handler)  # 异常终止信号
-        signal.signal(signal.SIGQUIT, signal_handler)  # 退出信号
-    except (AttributeError, ValueError):
-        pass
-
-# 设置日志关闭钩子
-setup_logging_shutdown_hook()
-
 
 class MachineMiner:
-    def __init__(self, username: str, password: str, level: str):
-        self.brain = ml.WorldQuantBrain(username, password, level)
+    def __init__(self, username: str, password: str, level: str, logger: logging.Logger = None):
+        self.brain = ml.WorldQuantBrain(username, password, level, logger)
         self.alpha_bag = []
         self.gold_bag = []
         self.database = zdb.db_operations.DataBaseOp()
+        self.logger = logger
         
     def mine_alphas(self, region="USA", universe="TOP3000"):
-        logging.info(f"Starting machine alpha mining for region: {region}, universe: {universe}")
+        self.logger.info(f"Starting machine alpha mining for region: {region}, universe: {universe}")
         
         while True:
             try:
                 # Get data fields
-                logging.info("Fetching data fields...")
+                self.logger.info("Fetching data fields...")
                 fields_df = self.brain.get_datafields(region=region, universe=universe)
-                logging.info(f"Got {len(fields_df)} data fields")
+                self.logger.info(f"Got {len(fields_df)} data fields")
                 
                 matrix_fields = self.brain.process_datafields(fields_df, "matrix")
                 vector_fields = self.brain.process_datafields(fields_df, "vector")
-                logging.info(f"Processed {len(matrix_fields)} matrix fields and {len(vector_fields)} vector fields")
+                self.logger.info(f"Processed {len(matrix_fields)} matrix fields and {len(vector_fields)} vector fields")
                 
                 # Generate first order alphas
-                logging.info("Generating first order alphas...")
+                self.logger.info("Generating first order alphas...")
                 first_order = self.brain.get_first_order(vector_fields + matrix_fields, self.brain.ops_set, region)
-                logging.info(f"Generated {len(first_order)} first order alphas")
-                logging.info(f"Sample alphas: {first_order[:3]}")
+                self.logger.info(f"Generated {len(first_order)} first order alphas")
+                self.logger.info(f"Sample alphas: {first_order[:3]}")
                 
                 # Prepare alpha batches
                 alpha_list = [(alpha, 0) for alpha in first_order]
                 pools = self.brain.load_task_pool(alpha_list, 10, 10)
-                logging.info(f"Created {len(pools)} pools with {len(pools[0]) if pools else 0} tasks each")
+                self.logger.info(f"Created {len(pools)} pools with {len(pools[0]) if pools else 0} tasks each")
                 
                 # Run simulations
-                logging.info("Starting simulations...")
+                self.logger.info("Starting simulations...")
                 self.brain.multi_simulate(pools, "INDUSTRY", region, universe, 0)
                 
                 # Process results
                 self._process_results()
                 
             except Exception as e:
-                logging.error(f"Error in mining loop: {str(e)}")
+                self.logger.error(f"Error in mining loop: {str(e)}")
                 sleep(600)
                 self.brain.login()
                 continue
@@ -135,10 +77,10 @@ class MachineMiner:
         
         with open(f'machine_results_{timestamp}.json', 'w') as f:
             json.dump(results, f, indent=2)
-        logging.info(f"Results saved to machine_results_{timestamp}.json")
+        self.logger.info(f"Results saved to machine_results_{timestamp}.json")
 
     def simulate_run(self, dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count=100, offset=0, region='USA',universe='TOP3000',delay=1,neutralize='SUBINDUSTRY',template =False, pool_size=7):
-        logging.info(f"开始运行:{dataset_id},{dataset_prefix},{dataset_dsc},{dataset_cat},{count},{offset}, {region},{universe},{delay},{neutralize},{template}, {pool_size}")
+        self.logger.info(f"开始运行:{dataset_id},{dataset_prefix},{dataset_dsc},{dataset_cat},{count},{offset}, {region},{universe},{delay},{neutralize},{template}, {pool_size}")
         # 获取字段
         pc_fields = self.simulate_fields(region=region,universe=universe,delay=delay, dataset_id=dataset_id,count=count, offset=offset)
         if template:
@@ -184,10 +126,10 @@ class MachineMiner:
         # 筛选一阶alpha
         fo_tracker = self.brain.my_get_alphas(start_time_one_str.replace(" ","T"),end_time_one_str.replace(" ","T"), 0.5, 0.4, region, 100,"track", True, "")
         if(len(fo_tracker)==0):
-            logging.info("筛选一阶alpha数量：%s"%len(fo_tracker))
+            self.logger.info("筛选一阶alpha数量：%s"%len(fo_tracker))
             return (len(fo_tracker),"","")
         # 剪枝
-        fo_layer=self.brain.prune(fo_tracker,dataset_prefix,5)
+        fo_layer=self.brain.prune(fo_tracker,region,dataset_prefix,5)
         # 生成二阶alpha
         so_alpha_list = []
         group_ops = ["group_neutralize", "group_rank", "group_zscore"]
@@ -218,10 +160,10 @@ class MachineMiner:
         # 筛选2阶alpha
         fo_tracker = self.brain.my_get_alphas(start_time_sec_str.replace(" ","T"),end_time_sec_str.replace(" ","T"), 1.4, 0.7, region, 100,"track", True, "")
         if(len(fo_tracker)==0):
-            logging.info("筛选2阶alpha数量：%s"%len(fo_tracker))
+            self.logger.info("筛选2阶alpha数量：%s"%len(fo_tracker))
             return len(fo_tracker)
         # 剪枝
-        fo_layer=self.brain.prune(fo_tracker,dataset_prefix,5)
+        fo_layer=self.brain.prune(fo_tracker,region,dataset_prefix,5)
         # 生成三阶alpha
         th_alpha_list=[]
         for expr,decay in fo_layer:

@@ -1,7 +1,7 @@
 from time import sleep
 import time
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from logger.handlers import TimedRotatingFileHandler
 import json
 import os
 import requests
@@ -15,70 +15,76 @@ if project_root not in sys.path:
 # 导入machine_miner模块
 from python.consultant import machine_miner
 import python.consultant.machine_lib as ml
+from python.logger_init import get_module_logger
 
 # 创建log文件夹（如果不存在）
 log_dir = os.path.join(project_root, 'log')
 os.makedirs(log_dir, exist_ok=True)
 
-# 配置日志，输出到log文件夹下，并确保编码为utf-8
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        TimedRotatingFileHandler(os.path.join(log_dir, 'simulate_check.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+# 获取模块级别的logger
+logger = get_module_logger(__name__, log_dir, 'sim_check',logging.INFO)
 
-# 确保程序退出时正确关闭日志文件
-def setup_logging_shutdown_hook():
-    import atexit
-    import signal
-    import threading
-    
-    # 创建锁以确保线程安全
-    log_lock = threading.RLock()
-    
-    def close_loggers():
-        with log_lock:
-            # 确保所有日志都被刷新和关闭
-            for handler in logging.root.handlers[:]:
-                try:
-                    handler.flush()
-                    handler.close()
-                except Exception as e:
-                    # 即使出现错误也继续关闭其他处理器
-                    print(f"Error closing logger handler: {e}", file=sys.stderr)
-    
-    # 注册程序退出钩子
-    atexit.register(close_loggers)
-    
-    # 注册信号处理函数
-    def signal_handler(sig, frame):
-        print(f"收到信号 {sig}，正在优雅关闭...", file=sys.stderr)
-        close_loggers()
-        sys.exit(0)
-    
-    # 处理更多类型的信号
-    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-    signal.signal(signal.SIGTERM, signal_handler) # 终止信号
-    
-    # 在Windows上可能不支持以下信号，但不会导致错误
-    try:
-        signal.signal(signal.SIGABRT, signal_handler)  # 异常终止信号
-        signal.signal(signal.SIGQUIT, signal_handler)  # 退出信号
-    except (AttributeError, ValueError):
-        pass
+# # 配置日志，输出到log文件夹下，并确保编码为utf-8
+# logger.basicConfig(
+#     level=logger.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         TimedRotatingFileHandler(os.path.join(log_dir, 'simulate_check.txt'), when='midnight', interval=1, backupCount=30, encoding='utf-8'),
+#         logger.StreamHandler()
+#     ]
+# )
 
-# 设置日志关闭钩子
-setup_logging_shutdown_hook()
+# # 确保程序退出时正确关闭日志文件
+# def setup_logging_shutdown_hook():
+#     import atexit
+#     import signal
+#     import threading
+    
+#     # 创建锁以确保线程安全
+#     log_lock = threading.RLock()
+    
+#     def close_loggers():
+#         with log_lock:
+#             # 确保所有日志都被刷新和关闭
+#             for handler in logger.root.handlers[:]:
+#                 try:
+#                     handler.flush()
+#                     handler.close()
+#                 except Exception as e:
+#                     # 即使出现错误也继续关闭其他处理器
+#                     print(f"Error closing logger handler: {e}", file=sys.stderr)
+    
+#     # 注册程序退出钩子
+#     atexit.register(close_loggers)
+    
+#     # 注册信号处理函数
+#     def signal_handler(sig, frame):
+#         print(f"收到信号 {sig}，正在优雅关闭...", file=sys.stderr)
+#         close_loggers()
+#         sys.exit(0)
+    
+#     # 处理更多类型的信号
+#     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+#     signal.signal(signal.SIGTERM, signal_handler) # 终止信号
+    
+#     # 在Windows上可能不支持以下信号，但不会导致错误
+#     try:
+#         signal.signal(signal.SIGABRT, signal_handler)  # 异常终止信号
+#         signal.signal(signal.SIGQUIT, signal_handler)  # 退出信号
+#     except (AttributeError, ValueError):
+#         pass
+
+# # 设置日志关闭钩子
+# setup_logging_shutdown_hook()
 
 class CheckSubmission:
-    def __init__(self, username: str, password: str, level: str):
-        self.brain = ml.WorldQuantBrain(username, password, level)
+    def __init__(self, username: str, password: str, level: str, logger: logging.Logger = None):
+        self.brain = ml.WorldQuantBrain(username, password, level, logger)
         self.alpha_bag = []
         self.gold_bag = []
-        self.region_list = ["USA", "GLB", "ASI"]
+        self.logger = logger
+        # self.region_list = ["USA", "GLB", "ASI"]
+        self.region_list = ["GLB", "ASI"]
         self.tags = ["SharpFit2","Sharp2","MayPPA"]
 
     def check_alpha(self):
@@ -104,7 +110,7 @@ class CheckSubmission:
     def check_alpha_region(self, region: str, start_time: str, end_time: str, sharp: float, fit: float, tag: str, other_para: str):
         th_tracker=self.brain.my_get_alphas(start_time, end_time, sharp, fit, region, 200,"submit", True, other_para)
         if th_tracker is None or len(th_tracker) == 0:
-            logging.info(f"check_alpha_region_get: {tag} {region} {len(th_tracker)}")
+            self.logger.info(f"check_alpha_region_get: {tag} {region} {len(th_tracker)}")
             return
         #将get的alpha的id取出至stone_bag,用apicheck submission
         stone_bag = []
@@ -114,11 +120,11 @@ class CheckSubmission:
                 continue
             stone_bag.append(alpha['id'])
         if len(stone_bag) == 0:
-            logging.info(f"check_alpha_region_get_no_tag: {tag} {region} {len(stone_bag)}")
+            self.logger.info(f"check_alpha_region_get_no_tag: {tag} {region} {len(stone_bag)}")
             return
         self.brain.check_submission(stone_bag, check_bag, 0, tags=[tag])
-        logging.info(f"check_submission: {tag} {region} {len(stone_bag)} {len(check_bag)}")
-        # logging.info(f"check_submission: {check_bag}")
+        self.logger.info(f"check_submission: {tag} {region} {len(stone_bag)} {len(check_bag)}")
+        # self.logger.info(f"check_submission: {check_bag}")
         
 
 
@@ -143,7 +149,7 @@ def main():
     # batch_run(miner)
     
     # 方法2: 创建实例并赋值给全局变量（可选实现）
-    check = CheckSubmission(username, password, level)
+    check = CheckSubmission(username, password, level, logger)
     check.check_alpha()
 
 if __name__ == "__main__":

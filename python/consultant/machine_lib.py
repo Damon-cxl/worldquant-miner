@@ -28,11 +28,12 @@ group_ops_G = ["group_rank",  "group_mean", "group_median"]
 
 twin_field_ops = ["ts_corr", "ts_covariance", "ts_co_kurtosis", "ts_co_skewness", "ts_theilsen"]
 class WorldQuantBrain:
-    def __init__(self, username: str, password: str, level: str):
+    def __init__(self, username: str, password: str, level: str, logger: logging.Logger = None):
         self.username = username
         self.password = password
         self.level = level
         self.session = None
+        self.logger = logger
         self.desc =  "Idea: \nThis alpha identifies stocks with extreme negative debt service ratio trends, neutralized by relation-based cluster effects. It targets stocks with the most extreme negative 180-day quantile rankings within their relation-based clusters. The strategy is based on the premise that stocks with extreme negative debt service characteristics, when adjusted for relation-based cluster factors, may indicate potential mispricing.\nRationale for data used: \noth450_mfm_gem3_dsrt\nThis debt service ratio data field measures a company's ability to service its debt obligations. Low values suggest difficulty in meeting debt obligations, while high values indicate strong capacity to service debt. By focusing on this metric, this alpha targets stocks with extreme debt service characteristics.\nRationale for operators used: \nts_quantile(..., 180)\nCalculates the quantile ranking of debt service ratio values over a 180-day window, capturing long-term debt service ratio patterns. This operator transforms absolute values into relative rankings from 0 to 1, enabling comparison across stocks with different scales."
         self.basic_ops_E = ["log", "sqrt", "reverse", "inverse", "rank", "zscore", "log_diff", "s_log_1p",
                          'fraction', 'quantile', "normalize", "scale_down"]
@@ -58,7 +59,7 @@ class WorldQuantBrain:
 
     def login(self):
         """Initialize or refresh session with WorldQuant Brain."""
-        logging.info("Authenticating with WorldQuant Brain...")
+        self.logger.info("Authenticating with WorldQuant Brain...")
         self.session = requests.Session()
         self.session.auth = (self.username, self.password)
         response = self.session.post('https://api.worldquantbrain.com/authentication')
@@ -70,53 +71,53 @@ class WorldQuantBrain:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         })
-        logging.info("Authentication successful")
+        self.logger.info("Authentication successful")
         return self.session
 
     def multi_simulate(self, alpha_pools: list, neut: str, region: str, universe: str, start: int = 0):
         """Run multiple alpha simulations in parallel."""
-        logging.info(f"Starting multi-simulate for {len(alpha_pools)} pools")
+        self.logger.info(f"Starting multi-simulate for {len(alpha_pools)} pools")
         
         for x, pool in enumerate(alpha_pools):
             if x < start:
                 continue
                 
             progress_urls = []
-            logging.info(f"Processing pool {x+1}/{len(alpha_pools)}")
+            self.logger.info(f"Processing pool {x+1}/{len(alpha_pools)}")
             
             for y, task in enumerate(pool):
                 sim_data_list = self.generate_sim_data(task, region, universe, neut)
-                logging.info(f"Generated simulation data for task {y+1}/{len(pool)}")
-                # logging.info(f"Simulation data: {sim_data_list}")
+                self.logger.info(f"Generated simulation data for task {y+1}/{len(pool)}")
+                # self.logger.info(f"Simulation data: {sim_data_list}")
                 try:
                     simulation_response = self.session.post('https://api.worldquantbrain.com/simulations', 
                                                          json=sim_data_list)
                     if simulation_response.status_code == 401:
-                        logging.info("Session expired, re-authenticating...")
+                        self.logger.info("Session expired, re-authenticating...")
                         self.login()
                         simulation_response = self.session.post('https://api.worldquantbrain.com/simulations', 
                                                             json=sim_data_list)
                     
                     if simulation_response.status_code != 201:
-                        logging.error(f"Simulation API error: {simulation_response.text}")
+                        self.logger.error(f"Simulation API error: {simulation_response.text}")
                         continue
                         
                     simulation_progress_url = simulation_response.headers.get('Location')
                     if not simulation_progress_url:
-                        logging.error("No Location header in response")
+                        self.logger.error("No Location header in response")
                         continue
                         
                     progress_urls.append(simulation_progress_url)
-                    logging.info(f"Posted simulation for task {y+1}, got progress URL: {simulation_progress_url}")
+                    self.logger.info(f"Posted simulation for task {y+1}, got progress URL: {simulation_progress_url}")
                     
                 except Exception as e:
-                    logging.error(f"Error posting simulation: {str(e)}")
+                    self.logger.error(f"Error posting simulation: {str(e)}")
                     sleep(600)
                     self.login()
                     continue
 
             self._monitor_progress(progress_urls)
-            logging.info(f"Pool {x+1} simulations completed")
+            self.logger.info(f"Pool {x+1} simulations completed")
 
     def _monitor_progress(self, progress_urls: list):
         """Monitor simulation progress."""
@@ -130,12 +131,12 @@ class WorldQuantBrain:
                     sleep(float(retry_after))
 
                 status = simulation_progress.json().get("status")
-                logging.info(f"Task {j+1} status: {status}")
+                self.logger.info(f"Task {j+1} status: {status}")
                 if status != "COMPLETE":
-                    logging.warning(f"Task not complete: {progress}")
+                    self.logger.warning(f"Task not complete: {progress}")
 
             except Exception as e:
-                logging.error(f"Error monitoring progress: {str(e)}")
+                self.logger.error(f"Error monitoring progress: {str(e)}")
 
     def generate_sim_data(self, alpha_list, region, uni, neut):
         sim_data_list = []
@@ -210,7 +211,7 @@ class WorldQuantBrain:
                 "https://api.worldquantbrain.com/alphas/" + alpha_id, json=params
             )
         except Exception as e:
-            logging.error(f"set_alpha_properties {alpha_id} error: {str(e)}")
+            self.logger.error(f"set_alpha_properties {alpha_id} error: {str(e)}")
             return
     
     def check_submission(self, alpha_bag, gold_bag, start, tags: list = None):
@@ -241,8 +242,8 @@ class WorldQuantBrain:
                 gold_bag.append((g, pc))
                 # 设置alpha的属性
                 self.set_alpha_properties(g, name="check_submission", tags=tags, regular_desc=self.desc)
-                logging.info(f"check_pass: {g} {pc}")
-        logging.info(f"check_submission depot: {depot}")
+                self.logger.info(f"check_pass: {g} {pc}")
+        self.logger.info(f"check_submission depot: {depot}")
         return gold_bag
 
     def get_check_submission(self, alpha_id):
@@ -1150,5 +1151,5 @@ class WorldQuantBrain:
         if current_pool:
             pools.append(current_pool)
         
-        logging.info(f"Created {len(pools)} pools with {batch_size} alphas per batch")
+        self.logger.info(f"Created {len(pools)} pools with {batch_size} alphas per batch")
         return pools
