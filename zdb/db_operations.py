@@ -58,7 +58,17 @@ class DataBaseOp:
         """
         return self.update_com("brain.alpha_simulate", data, ("batch_time = %s and order_seq = %s",(batch_time, order_seq)))
 
-
+    def get_simulate_record_batch(self,batch_time):
+        """
+        从数据库获取模拟结果
+        """
+        query = """
+            SELECT * FROM brain.alpha_simulate 
+            where batch_time = %s
+            ORDER BY order_seq
+        """
+        params = (batch_time,)
+        return self.db_helper.execute_query(query, params)
 
 
     def get_simulation_results(self,limit=10):

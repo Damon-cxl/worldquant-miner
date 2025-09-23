@@ -83,14 +83,29 @@ class CheckSubmission:
         self.alpha_bag = []
         self.gold_bag = []
         self.logger = logger
-        # self.region_list = ["USA", "GLB", "ASI"]
-        self.region_list = ["GLB", "ASI"]
+        self.region_list = ["USA", "GLB", "ASI"]
+        # self.region_list = ["GLB", "ASI"]
         self.tags = ["SharpFit2","Sharp2","MayPPA"]
+        # self.tags = ["MayPPA"]
 
     def check_alpha(self):
-        start_time = "2025-09-16T00:00:00"
-        end_time = "2025-09-17T00:00:00"
+        # start_time = "2025-09-16T00:00:00"
+        # end_time = "2025-09-17T00:00:00"
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # start_time = "2025-09-17T00:00:00"
+        # end_time = "2025-09-18T00:00:00"
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # start_time = "2025-09-21T00:00:00"
+        # end_time = "2025-09-22T00:00:00"
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # start_time = "2025-09-22T00:00:00"
+        # end_time = "2025-09-23T00:00:00"
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
+        start_time = "2025-09-23T00:00:00"
+        end_time = "2025-09-24T00:00:00"
         other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
         for region in self.region_list:
             for tag in self.tags:
                 if tag == "SharpFit2":
@@ -101,9 +116,9 @@ class CheckSubmission:
                     fit = 1
                     other_para += "&is.fitness%3C2"
                 elif tag == "MayPPA":
-                    sharp = 1.1
+                    sharp = 1
                     fit = 0
-                    other_para += "&is.sharpe%3C2&is.fitness%3C1"
+                    other_para += "&is.sharpe%3C2"
                 self.check_alpha_region(region, start_time, end_time, sharp, fit, tag, other_para)
         
 

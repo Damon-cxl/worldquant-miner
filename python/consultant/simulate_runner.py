@@ -98,13 +98,15 @@ def batch_run():
     # template =True
     template =False
     pool_size=7
-    dataset_id="fundamental17"
-    dataset_prefix="fnd17"
-    dataset_dsc="Direct Fundamental Data"
-    # dataset_cat="Risk"
-    dataset_cat="Fundamental"
+    dataset_id="risk70"
+    dataset_prefix="rsk70"
+    dataset_dsc="Multi-Factor Model"
+    dataset_cat="Risk"
+    # dataset_cat="Fundamental"
     # dataset_cat="Analyst"
-    field_count = global_miner.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)
+    # 过滤出coverage覆盖率大于0.7的字段
+    other_para = "&coverage%3E=0.7"
+    field_count = global_miner.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id,other_para=other_para)
     # field_count = 1
     count = 2
     offset = 2
@@ -113,10 +115,13 @@ def batch_run():
         step = field_count
     for i in range(offset, field_count, step):
         count = count + step
-        global_miner.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size)
+        global_miner.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size,other_para=other_para)
         offset = offset + step
 
-
+def batch_run_next():
+    batch_time = [1758511676,1758534787,1758529659,1758585792]
+    for t in batch_time:
+        global_miner.simulate_run_next(t)
 # 在main函数中初始化并使用
 
 def main():
@@ -142,6 +147,7 @@ def main():
     # 方法2: 创建实例并赋值给全局变量（可选实现）
     global_miner = machine_miner.MachineMiner(username, password, level, logger)
     batch_run()
+    # batch_run_next()
 
 if __name__ == "__main__":
     main()

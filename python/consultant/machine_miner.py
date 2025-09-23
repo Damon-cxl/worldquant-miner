@@ -103,8 +103,11 @@ class MachineMiner:
         # 一阶运行开始记录
         start_time_one = datetime.datetime.now() - datetime.timedelta(hours=12)
         start_time_one_str = start_time_one.strftime("%Y-%m-%d %H:%M:%S")
-        sim_data_one = {"batch_time": sim_batch, "start_time": start_time_one_str, "order_seq": 1, "dataset": dataset_id, "dataset_dsc": dataset_dsc, "dataset_cat": dataset_cat, "region": region, "universe": universe, "delay": delay, "neutralize": neutralize, "field_offset": offset, "field_count": count, "alpha_count": len(first_order), "multi_sum": pool_size, "pool": len(fo_pools), "template": None}
-
+        sim_data_one = {"batch_time": sim_batch, "start_time": start_time_one_str, "order_seq": 1, "dataset": dataset_id, "dataset_dsc": dataset_dsc, "dataset_cat": dataset_cat, "region": region, "universe": universe, "delay": delay, "neutralize": neutralize, "field_offset": offset, "field_count": count, "alpha_count": len(first_order), "multi_sum": pool_size, "pool": len(fo_pools), "template": None,"field_prefix":dataset_prefix}
+        if template:
+            sim_data_one['template'] = 'template'
+        else:
+            sim_data_one['template'] = 1
         self.database.save_simulate_record(sim_data_one)
         # 一阶运行
         self.brain.multi_simulate(fo_pools, neutralize, region, universe, 0)
@@ -118,8 +121,46 @@ class MachineMiner:
         if (sec_res[0]==0):
             return
         # 三阶运行
-        self.simulate_run_third_order(sec_res[1],sec_res[2],dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+        self.simulate_run_third_order(start_time_one_str,sec_res[2],dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
 
+    # 根据一阶记录运行二阶和三阶
+    def simulate_run_next(self, batch_time, pool_size=7):
+        sim_records = self.database.get_simulate_record_batch(batch_time)
+        if(len(sim_records) == 0):
+            self.logger.error(f"simulate_run_next batch_time:{batch_time} 没有查询到记录")
+            return;
+        if(len(sim_records) == 3):
+            self.logger.error(f"simulate_run_next batch_time:{batch_time} 有3阶记录,不需要再跑")
+            return;
+        sim_data_one = None
+        sim_data_two = None
+        for rec in sim_records:
+            if rec['order_seq'] == 1:
+                sim_data_one = rec
+            elif rec['order_seq'] == 2:
+                sim_data_two = rec
+        region = sim_data_one['region']
+        universe = sim_data_one['universe']
+        neutralize = sim_data_one['neutralize']
+        dataset_prefix = sim_data_one['field_prefix']
+        if sim_data_two is None:
+            # 一阶运行时间
+            start_time_one_str = sim_data_one['start_time'].strftime("%Y-%m-%d %H:%M:%S")
+            end_time_one_str = sim_data_one['end_time'].strftime("%Y-%m-%d %H:%M:%S")
+            # 二阶运行
+            sec_res = self.simulate_run_second_order(start_time_one_str,end_time_one_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+            if (sec_res[0]==0):
+                return
+            # 二阶运行时间
+            start_time_two_str = sim_data_one['start_time'].strftime("%Y-%m-%d %H:%M:%S")
+            end_time_two_str = sec_res[2]
+        else:
+            # 一二阶运行时间
+            start_time_two_str = sim_data_one['start_time'].strftime("%Y-%m-%d %H:%M:%S")
+            end_time_two_str = sim_data_two['end_time'].strftime("%Y-%m-%d %H:%M:%S")
+        # 三阶运行
+        print("3阶")
+        self.simulate_run_third_order(start_time_two_str,end_time_two_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
     
 
     def simulate_run_second_order(self, start_time_one_str,end_time_one_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7):
@@ -208,5 +249,5 @@ class MachineMiner:
             
         return alpha_set
 
-    def get_datafields_count(self, region,universe,delay, dataset_id):
-        return self.brain.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id)
+    def get_datafields_count(self, region,universe,delay, dataset_id,other_para=""):
+        return self.brain.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id,other_para=other_para)

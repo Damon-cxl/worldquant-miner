@@ -304,6 +304,7 @@ class WorldQuantBrain:
         search: str = '',
         count: int = 100,
         offset: int = 0,
+        other_para: str = "",
     ):
         step = 50
         if(count - offset<step):
@@ -313,6 +314,7 @@ class WorldQuantBrain:
                 "https://api.worldquantbrain.com/data-fields?"
                 + f"instrumentType={instrument_type}"
                 + f"&region={region}&delay={str(delay)}&universe={universe}&dataset.id={dataset_id}&limit={step}"
+                + f"{other_para}"
                 + "&offset={x}"
             )
         else:
@@ -321,6 +323,7 @@ class WorldQuantBrain:
                 + f"instrumentType={instrument_type}"
                 + f"&region={region}&delay={str(delay)}&universe={universe}&limit={step}"
                 + f"&search={search}"
+                + f"{other_para}"
                 + "&offset={x}"
             )
         
@@ -342,12 +345,14 @@ class WorldQuantBrain:
         universe: str = "TOP3000",
         dataset_id: str = "",
         search: str = "",
+        other_para: str = "",
     ):
         if len(search) == 0:
             url_template = (
                 "https://api.worldquantbrain.com/data-fields?"
                 + f"instrumentType={instrument_type}"
                 + f"&region={region}&delay={str(delay)}&universe={universe}&dataset.id={dataset_id}&limit=1"
+                + f"{other_para}"
                 + "&offset=0"
             )
         else:
@@ -356,6 +361,7 @@ class WorldQuantBrain:
                 + f"instrumentType={instrument_type}"
                 + f"&region={region}&delay={str(delay)}&universe={universe}&limit=1"
                 + f"&search={search}"
+                + f"{other_para}"
                 + "&offset=0"
             )
             
