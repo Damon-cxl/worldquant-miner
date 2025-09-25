@@ -131,8 +131,6 @@ class CheckSubmission:
         stone_bag = []
         check_bag = []
         for alpha in th_tracker:
-            if len(alpha['tags']) > 0:
-                continue
             stone_bag.append(alpha['id'])
         self.logger.info(f"check_alpha_region_get_filt_tag: {tag} {region} {len(stone_bag)}")
         if len(stone_bag) == 0:
