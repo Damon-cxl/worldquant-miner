@@ -115,7 +115,7 @@ def batch_run():
         step = field_count
     for i in range(offset, field_count, step):
         count = count + step
-        global_miner.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size,other_para=other_para)
+        global_miner.simulate_run(dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count, offset, region,universe,delay,neutralize,template, pool_size)
         offset = offset + step
 
 def batch_run_next():

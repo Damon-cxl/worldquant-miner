@@ -472,7 +472,7 @@ class WorldQuantBrain:
     
     ## filter_flag：控制是否执行厂字alpha筛除
     ## other_params: 拼接的查询参数，如 '&pnl>10000000'
-    def my_get_alphas(self, start_date, end_date, sharpe_th, fitness_th, region, alpha_num, usage, filter_flag, other_params = ''):
+    def my_get_alphas(self, start_date, end_date, sharpe_th, fitness_th, region, alpha_num, usage, filter_flag, other_params = '', filter_tags = True):
         
         next_alphas = []
         decay_alphas = []
@@ -517,6 +517,9 @@ class WorldQuantBrain:
                     if(len(alpha_list) <= 0):
                         break
                     for j in range(len(alpha_list)):
+                        if usage == "submit" and filter_tags:
+                            if len(alpha_list[j]['tags']) > 0:
+                                continue
                         alpha_id = alpha_list[j]["id"]
                         name = alpha_list[j]["name"]
                         tags = alpha_list[j]['tags']
