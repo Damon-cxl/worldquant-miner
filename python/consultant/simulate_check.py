@@ -83,8 +83,8 @@ class CheckSubmission:
         self.alpha_bag = []
         self.gold_bag = []
         self.logger = logger
-        self.region_list = ["USA", "GLB", "ASI"]
-        # self.region_list = ["GLB", "ASI"]
+        # self.region_list = ["USA", "GLB", "ASI"]
+        self.region_list = ["ASI"]
         self.tags = ["SharpFit2","Sharp2","MayPPA"]
         # self.tags = ["MayPPA"]
 
@@ -95,17 +95,27 @@ class CheckSubmission:
         # start_time = "2025-09-17T00:00:00"
         # end_time = "2025-09-18T00:00:00"
         # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
+        start_time = "2025-09-18T00:00:00"
+        end_time = "2025-09-19T00:00:00"
+        other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
         # start_time = "2025-09-21T00:00:00"
         # end_time = "2025-09-22T00:00:00"
         # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
         # start_time = "2025-09-22T00:00:00"
         # end_time = "2025-09-23T00:00:00"
         # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
         # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
-        start_time = "2025-09-23T00:00:00"
-        end_time = "2025-09-24T00:00:00"
-        other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # start_time = "2025-09-23T00:00:00"
+        # end_time = "2025-09-24T00:00:00"
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
         # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
+        start_time = "2025-09-24T00:00:00"
+        end_time = "2025-09-25T00:00:00"
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
         for region in self.region_list:
             for tag in self.tags:
                 if tag == "SharpFit2":

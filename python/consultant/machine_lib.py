@@ -100,6 +100,7 @@ class WorldQuantBrain:
                     
                     if simulation_response.status_code != 201:
                         self.logger.error(f"Simulation API error: {simulation_response.text}")
+                        self.logger.error(f"Simulation API error alphas: {task}")
                         continue
                         
                     simulation_progress_url = simulation_response.headers.get('Location')

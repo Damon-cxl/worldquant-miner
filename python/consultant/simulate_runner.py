@@ -98,18 +98,18 @@ def batch_run():
     # template =True
     template =False
     pool_size=7
-    dataset_id="risk70"
-    dataset_prefix="rsk70"
-    dataset_dsc="Multi-Factor Model"
-    dataset_cat="Risk"
+    dataset_id="analyst15"
+    dataset_prefix="anl15"
+    dataset_dsc="Earnings forecasts"
+    # dataset_cat="Risk"
     # dataset_cat="Fundamental"
-    # dataset_cat="Analyst"
+    dataset_cat="Analyst"
     # 过滤出coverage覆盖率大于0.7的字段
     other_para = "&coverage%3E=0.7"
     field_count = global_miner.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id,other_para=other_para)
     # field_count = 1
-    count = 2
-    offset = 2
+    count = 0
+    offset = 0
     step = 2
     if field_count < step:
         step = field_count
