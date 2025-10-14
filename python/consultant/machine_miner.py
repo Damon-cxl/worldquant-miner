@@ -53,7 +53,7 @@ class MachineMiner:
                 
                 # Run simulations
                 self.logger.info("Starting simulations...")
-                self.brain.multi_simulate(pools, "INDUSTRY", region, universe, 0)
+                self.brain.multi_simulate(pools, "INDUSTRY", region, universe,7, 0)
                 
                 # Process results
                 self._process_results()
@@ -110,7 +110,7 @@ class MachineMiner:
             sim_data_one['template'] = 1
         self.database.save_simulate_record(sim_data_one)
         # 一阶运行
-        self.brain.multi_simulate(fo_pools, neutralize, region, universe, 0)
+        self.brain.multi_simulate(fo_pools, neutralize, region, universe, pool_size, 0)
         # 一阶运行结束记录
         end_time_one = datetime.datetime.now() - datetime.timedelta(hours=12)
         end_time_one_str = end_time_one.strftime("%Y-%m-%d %H:%M:%S")
@@ -143,6 +143,7 @@ class MachineMiner:
         universe = sim_data_one['universe']
         neutralize = sim_data_one['neutralize']
         dataset_prefix = sim_data_one['field_prefix']
+        del sim_data_one['id']
         if sim_data_two is None:
             # 一阶运行时间
             start_time_one_str = sim_data_one['start_time'].strftime("%Y-%m-%d %H:%M:%S")
@@ -189,7 +190,7 @@ class MachineMiner:
         sim_data["pool"]=len(so_pools)
         self.database.save_simulate_record(sim_data)
         # 二阶运行
-        self.brain.multi_simulate(so_pools, neutralize, region, universe, 0)
+        self.brain.multi_simulate(so_pools, neutralize, region, universe, pool_size, 0)
         # 二阶运行结束记录
         end_time = datetime.datetime.now() - datetime.timedelta(hours=12)
         end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -221,7 +222,7 @@ class MachineMiner:
         sim_data["alpha_count"]=len(th_alpha_list)
         self.database.save_simulate_record(sim_data)
         # 3阶运行
-        self.brain.multi_simulate(so_pools, neutralize, region, universe, 0)
+        self.brain.multi_simulate(so_pools, neutralize, region, universe, pool_size, 0)
         # 3阶运行结束记录
         end_time = datetime.datetime.now() - datetime.timedelta(hours=12)
         end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")

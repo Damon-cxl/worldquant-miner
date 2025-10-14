@@ -93,6 +93,7 @@ def batch_run():
     # universe='ILLIQUID_MINVOL1M'
     delay=1
     neutralize='SUBINDUSTRY'
+    neutralize='STATISTICAL'
     # neutralize='SLOW_AND_FAST'
     # neutralize='FAST'
     # template =True

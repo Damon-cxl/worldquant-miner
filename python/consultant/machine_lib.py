@@ -74,17 +74,35 @@ class WorldQuantBrain:
         self.logger.info("Authentication successful")
         return self.session
 
-    def multi_simulate(self, alpha_pools: list, neut: str, region: str, universe: str, start: int = 0):
+    def multi_simulate(self, alpha_pools: list, neut: str, region: str, universe: str, pool_size: int = 8, start: int = 0):
+        lost_tasks = self.multi_simulate_core(alpha_pools, neut, region, universe, start)
+        while True:
+            if len(lost_tasks) == 0:
+                break
+            next_pools = []
+            curr_pool = []
+            for task in lost_tasks:
+                if len(curr_pool) < pool_size:
+                    curr_pool.append(task)
+                else:
+                    next_pools.append(curr_pool)
+                    curr_pool = [task]
+            if len(curr_pool) > 0:
+                next_pools.append(curr_pool)
+            lost_tasks = self.multi_simulate_core(next_pools, neut, region, universe, start)
+
+    def multi_simulate_core(self, alpha_pools: list, neut: str, region: str, universe: str, start: int = 0):
         """Run multiple alpha simulations in parallel."""
         self.logger.info(f"Starting multi-simulate for {len(alpha_pools)} pools")
         
+        lost_tasks = []
         for x, pool in enumerate(alpha_pools):
             if x < start:
                 continue
                 
             progress_urls = []
             self.logger.info(f"Processing pool {x+1}/{len(alpha_pools)}")
-            
+            progress_tasks = {}
             for y, task in enumerate(pool):
                 sim_data_list = self.generate_sim_data(task, region, universe, neut)
                 self.logger.info(f"Generated simulation data for task {y+1}/{len(pool)}")
@@ -100,6 +118,9 @@ class WorldQuantBrain:
                     
                     if simulation_response.status_code != 201:
                         self.logger.error(f"Simulation API error: {simulation_response.text}")
+                        if "CONCURRENT_SIMULATION_LIMIT_EXCEEDED" in simulation_response.text:
+                            lost_tasks.append(task)
+                            continue
                         self.logger.error(f"Simulation API error alphas: {task}")
                         continue
                         
@@ -108,6 +129,7 @@ class WorldQuantBrain:
                         self.logger.error("No Location header in response")
                         continue
                         
+                    progress_tasks[simulation_progress_url] = task
                     progress_urls.append(simulation_progress_url)
                     self.logger.info(f"Posted simulation for task {y+1}, got progress URL: {simulation_progress_url}")
                     
@@ -117,10 +139,11 @@ class WorldQuantBrain:
                     self.login()
                     continue
 
-            self._monitor_progress(progress_urls)
+            self._monitor_progress(progress_urls, progress_tasks)
             self.logger.info(f"Pool {x+1} simulations completed")
+        return lost_tasks
 
-    def _monitor_progress(self, progress_urls: list):
+    def _monitor_progress(self, progress_urls: list, progress_tasks: dict):
         """Monitor simulation progress."""
         for j, progress in enumerate(progress_urls):
             try:
@@ -134,9 +157,12 @@ class WorldQuantBrain:
                 status = simulation_progress.json().get("status")
                 self.logger.info(f"Task {j+1} status: {status}")
                 if status != "COMPLETE":
-                    self.logger.warning(f"Task not complete: {progress}")
+                    self.logger.error(f"Task not complete: {progress}")
+                    self.logger.error(f"Error monitoring progress: {progress_tasks[progress]}")
 
             except Exception as e:
+                self.logger.error(f"Error monitoring progress: {progress}")
+                self.logger.error(f"Error monitoring progress: {progress_tasks[progress]}")
                 self.logger.error(f"Error monitoring progress: {str(e)}")
 
     def generate_sim_data(self, alpha_list, region, uni, neut):
@@ -330,14 +356,31 @@ class WorldQuantBrain:
         
         datafields_list = []
         for x in range(offset, count, step):
-            datafields = self.session.get(url_template.format(x=x))
-            datafields_list.append(datafields.json()['results'])
+            datafields_list_d = self.get_datafields_detail(url_template.format(x=x))
+            datafields_list += datafields_list_d
      
         datafields_list_flat = [item for sublist in datafields_list for item in sublist]
      
         datafields_df = pd.DataFrame(datafields_list_flat)
         return datafields_df
-    
+
+    def get_datafields_detail(self, url):
+        datafields_detail_list = []
+        datafields = self.session.get(url)
+        try:
+            datafields_detail_list.append(datafields.json()['results'])
+        except:
+            self.logger.error(f"get_datafields error first: {datafields.json()}")
+            datafields2 = self.session.get(url)
+            try:
+                datafields_detail_list.append(datafields2.json()['results'])
+            except Exception as e:
+                self.logger.error(f"get_datafields error second: {datafields2}")
+                self.logger.error(f"get_datafields error second: {datafields2.json()}")
+                self.logger.error(f"get_datafields error second url: {url}")
+                raise e
+        return datafields_detail_list
+
     def get_datafields_count(
         self,
         instrument_type: str = "EQUITY",
@@ -501,8 +544,15 @@ class WorldQuantBrain:
         for url in urls:
             if usage == "submit":
                 # 提交Check时，获取总数循环处理
-                count_response = self.session.get(url.format(x=0, limit=1))
-                alpha_num = count_response.json()["count"]
+                tt_url = url.format(x=0, limit=1)
+                count_response = self.session.get(tt_url)
+                try:
+                    alpha_num = count_response.json()["count"]
+                except Exception as e:
+                    self.logger.error(f"get check alphas error: {count_response}")
+                    self.logger.error(f"get check alphas error: {count_response.json()}")
+                    self.logger.error(f"get check alphas error url: {tt_url}")
+                    raise e
                 if alpha_num == 0:
                     continue
             step = 100
@@ -1133,6 +1183,9 @@ class WorldQuantBrain:
                     output.append(alpha)
             elif op.startswith("group_percentage"):
                 alpha = "%s(%s,densify(%s),percentage=0.5)"%(op, field, group)
+                output.append(alpha)
+            elif op.startswith("group_mean"):
+                alpha = "%s(%s,1,densify(%s))"%(op, field, group)
                 output.append(alpha)
             else:
                 alpha = "%s(%s,densify(%s))"%(op, field, group)
