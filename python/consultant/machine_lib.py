@@ -371,6 +371,9 @@ class WorldQuantBrain:
             datafields_detail_list.append(datafields.json()['results'])
         except:
             self.logger.error(f"get_datafields error first: {datafields.json()}")
+            if "detail" in datafields.json():
+                if "Incorrect authentication credentials" in datafields.json()["detail"]:
+                    self.login()
             datafields2 = self.session.get(url)
             try:
                 datafields_detail_list.append(datafields2.json()['results'])

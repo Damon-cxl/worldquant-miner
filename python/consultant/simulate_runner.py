@@ -107,6 +107,8 @@ def batch_run():
     dataset_cat="Analyst"
     # 过滤出coverage覆盖率大于0.7的字段
     other_para = "&coverage%3E=0.7"
+    # 过滤出alpha数大于20的字段
+    other_para += "&alphaCount%3E=20"
     field_count = global_miner.get_datafields_count(region=region, delay=delay, universe=universe, dataset_id=dataset_id,other_para=other_para)
     # field_count = 1
     count = 0

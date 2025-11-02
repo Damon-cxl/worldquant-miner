@@ -2,6 +2,7 @@ import getpass
 import json
 import logging
 import os
+import sys
 import threading
 import time
 from functools import partial
@@ -21,7 +22,9 @@ from helpful_functions import (
 )
 
 DEV = False
-
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 class SingleSession(requests.Session):
     _instance = None
@@ -109,27 +112,35 @@ def get_credentials() -> tuple[str, str]:
         json.JSONDecodeError: If the credentials file exists but contains invalid JSON.
     """
 
-    credential_email = os.environ.get("BRAIN_CREDENTIAL_EMAIL")
-    credential_password = os.environ.get("BRAIN_CREDENTIAL_PASSWORD")
+    # credential_email = os.environ.get("BRAIN_CREDENTIAL_EMAIL")
+    # credential_password = os.environ.get("BRAIN_CREDENTIAL_PASSWORD")
+    try:
+        with open(project_root + '/credential.txt', 'r') as f:
+            credentials = json.load(f)
+        credential_email = credentials[0]
+        credential_password = credentials[1]
+    except (FileNotFoundError, json.JSONDecodeError, IndexError) as e:
+        raise ValueError(f"Error reading credentials from credential.txt: {e}")
+    
+    # credentials_folder_path = os.path.join(os.path.expanduser("~"), "secrets")
+    # credentials_file_path = os.path.join(credentials_folder_path, "platform-brain.json")
 
-    credentials_folder_path = os.path.join(os.path.expanduser("~"), "secrets")
-    credentials_file_path = os.path.join(credentials_folder_path, "platform-brain.json")
-
-    if Path(credentials_file_path).exists() and os.path.getsize(credentials_file_path) > 2:
-        with open(credentials_file_path) as file:
-            data = json.loads(file.read())
-    else:
-        os.makedirs(credentials_folder_path, exist_ok=True)
-        if credential_email and credential_password:
-            email = credential_email
-            password = credential_password
-        else:
-            email = input("Email:\n")
-            password = getpass.getpass(prompt="Password:")
-        data = {"email": email, "password": password}
-        with open(credentials_file_path, "w") as file:
-            json.dump(data, file)
-    return (data["email"], data["password"])
+    # if Path(credentials_file_path).exists() and os.path.getsize(credentials_file_path) > 2:
+    #     with open(credentials_file_path) as file:
+    #         data = json.loads(file.read())
+    # else:
+    #     os.makedirs(credentials_folder_path, exist_ok=True)
+    #     if credential_email and credential_password:
+    #         email = credential_email
+    #         password = credential_password
+    #     else:
+    #         email = input("Email:\n")
+    #         password = getpass.getpass(prompt="Password:")
+    #     data = {"email": email, "password": password}
+    #     with open(credentials_file_path, "w") as file:
+    #         json.dump(data, file)
+    # return (data["email"], data["password"])
+    return (credential_email, credential_password)
 
 
 def start_session() -> SingleSession:
