@@ -85,7 +85,10 @@ class CheckSubmission:
         self.gold_bag = []
         self.logger = logger
         # self.region_list = ["USA", "GLB", "ASI"]
-        self.region_list = ["ASI"]
+        # self.region_list = ["ASI"]
+        self.region_list = ["EUR"]
+        # self.region_list = ["USA"]
+        # self.region_list = ["GLB"]
         self.tags = ["SharpFit2","Sharp2","MayPPA"]
         # self.tags = ["MayPPA"]
 
@@ -113,12 +116,21 @@ class CheckSubmission:
         # end_time = "2025-09-24T00:00:00"
         # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
         # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
-        start_time = "2025-09-24T00:00:00"
-        end_time = "2025-09-25T00:00:00"
-        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
-        other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
+        start_time = "2025-11-13T00:00:00"
+        end_time = "2025-11-14T00:00:00"
 
+        # other_para = "&is.returns%3E=0.1&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.05&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.04&is.turnover%3C0.4&is.margin%3E=0.0004"
+        # other_para = "&is.returns%3E=0.03&is.turnover%3C0.4&is.margin%3E=0.0005"
+        # other_para = "&is.returns%3E=0.04&is.turnover%3C0.4&is.margin%3E=0.0015"
+        other_para = "&is.returns%3E=0.03&is.turnover%3C0.4&is.margin%3E=0.0010"
+        
         filter_tag = True
+
+        # start_time = "2025-10-28T00:00:00"
+        # end_time = "2025-10-29T00:00:00"
+        # other_para = "&is.returns%3E=0.03&is.turnover%3C0.4&is.margin%3E=0.0005"
         # tag = "MayPPA"
         # other_para += "&tag%3D" + tag
         # filter_tag = False
