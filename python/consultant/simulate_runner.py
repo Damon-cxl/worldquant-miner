@@ -124,7 +124,7 @@ def batch_run():
 def batch_run_next():
     batch_time = [1758511676,1758534787,1758529659,1758585792]
     for t in batch_time:
-        global_miner.simulate_run_next(t)
+        global_miner.simulate_run_next(t, pool_size=7, sharp_1=1.0, fitness_1=0.8, sharp_2=1.4, fitness_2=1)
 # 在main函数中初始化并使用
 
 def main():
@@ -149,8 +149,8 @@ def main():
     
     # 方法2: 创建实例并赋值给全局变量（可选实现）
     global_miner = machine_miner.MachineMiner(username, password, level, logger)
-    batch_run()
-    # batch_run_next()
+    # batch_run()
+    batch_run_next()
 
 if __name__ == "__main__":
     main()

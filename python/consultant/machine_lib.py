@@ -249,18 +249,22 @@ class WorldQuantBrain:
             if idx < start:
                 continue
             if idx % 5 == 0:
-                print(idx)
+                print(f"Check Process {idx} / {len(alpha_bag)}")
             if idx % 200 == 0:
                 self.login()
             #print(idx)
             pc = self.get_check_submission(g)
             if pc == "sleep":
+                # 设置alpha的属性，
+                self.set_alpha_properties(g, name=None, tags=[])
                 sleep(100)
                 self.login()
                 alpha_bag.append(g)
             elif pc != pc:
                 # pc is nan
                 print("check self-corrlation error")
+                # 设置alpha的属性，
+                self.set_alpha_properties(g, name=None, tags=[])
                 sleep(100)
                 alpha_bag.append(g)
             elif pc == "fail":
@@ -277,7 +281,7 @@ class WorldQuantBrain:
 
     def get_check_submission(self, alpha_id):
         while True:
-            # 设置alpha的属性
+            # 设置alpha的属性，检查中
             self.set_alpha_properties(alpha_id, name=None, tags=["Checking"], regular_desc=self.desc)
             # Check
             result = self.session.get("https://api.worldquantbrain.com/alphas/" + alpha_id + "/check")
@@ -296,8 +300,12 @@ class WorldQuantBrain:
             if not any(checks_df["result"] == "FAIL"):
                 return pc
             else:
+                # 设置alpha的属性，检查失败
+                self.set_alpha_properties(alpha_id, name=None, tags=["IS_FAIL"])
                 return "fail"
         except:
+            # 设置alpha的属性，清空tag，以便下次check
+            self.set_alpha_properties(alpha_id, name=None, tags=[])
             print("catch: %s"%(alpha_id))
             return "error"
             
@@ -571,6 +579,7 @@ class WorldQuantBrain:
                     if(len(alpha_list) <= 0):
                         break
                     for j in range(len(alpha_list)):
+                        # 提交Check时，过滤掉有tag的alpha，check未被check过的alpha
                         if usage == "submit" and filter_tags:
                             if len(alpha_list[j]['tags']) > 0:
                                 continue
@@ -607,11 +616,14 @@ class WorldQuantBrain:
                                 alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay,'tags':tags}
                                 result_list.append(alpha_data)
                         else:
+                            # IS 检查项有失败的跳过，并标记tag"IS_FAIL"
                             checks = alpha_list[j]["is"]["checks"]
                             pass_flag = True
                             for check in checks:
                                 if check["result"] == "FAIL":
                                     pass_flag = False
+                                    # 设置alpha的属性，标记tag"IS_FAIL"
+                                    self.set_alpha_properties(alpha_id, name=None, tags=["IS_FAIL"])
                             if pass_flag:
                                 alpha_data = {'id': alpha_id, 'sharpe':sharpe, 'fitness':fitness, 'turnover': turnover, 'margin':margin,'longCount':longCount,'shortCount':shortCount,'dateCreate':dateCreated,'exp':exp,'decay':decay,'tags':tags}
                                 result_list.append(alpha_data)
@@ -637,6 +649,7 @@ class WorldQuantBrain:
                     try:
                         response = self.wait_get(f'https://api.worldquantbrain.com/alphas/{rec["id"]}/recordsets/yearly-stats')
                         if response.status_code == 200:
+                            # 每一年的sharpe值为0的次数
                             yearly_status = response.json()['records']
                             for year_data in yearly_status:
                                 if year_data[6] == 0:
@@ -647,6 +660,7 @@ class WorldQuantBrain:
                         print(f"    处理alpha {rec['id']} 时发生异常: {str(e)}")
                     
                     with lock:  # 确保线程安全
+                        # 每一年的sharpe值为0的次数小于等于3，保留该alpha，超过3年没有数据则筛除
                         if zero_year_sharp <= 3:
                             final_result.append(rec)
                         else:
@@ -665,6 +679,9 @@ class WorldQuantBrain:
             print('######### 筛除厂子形alpha #########')
         else:
             final_result = result_list
+        # 对厂字alpha,标记tag"FACTORY_ALPHA"
+        for re_id in removed_alpha_ids:
+            self.set_alpha_properties(re_id, name=None, tags=["Lack_data"])
 
         print("count: %d"%count)
         print("pass_count: %d"%len(final_result))

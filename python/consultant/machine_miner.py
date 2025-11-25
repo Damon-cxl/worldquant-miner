@@ -79,8 +79,8 @@ class MachineMiner:
             json.dump(results, f, indent=2)
         self.logger.info(f"Results saved to machine_results_{timestamp}.json")
 
-    def simulate_run(self, dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count=100, offset=0, region='USA',universe='TOP3000',delay=1,neutralize='SUBINDUSTRY',template =False, pool_size=7):
-        self.logger.info(f"开始运行:{dataset_id},{dataset_prefix},{dataset_dsc},{dataset_cat},{count},{offset}, {region},{universe},{delay},{neutralize},{template}, {pool_size}")
+    def simulate_run(self, dataset_id,dataset_prefix,dataset_dsc,dataset_cat,count=100, offset=0, region='USA',universe='TOP3000',delay=1,neutralize='SUBINDUSTRY',template =False, pool_size=7, sharp_1=0.5, fitness_1=0.4, sharp_2=1.4, fitness_2=0.7):
+        self.logger.info(f"开始运行:{dataset_id},{dataset_prefix},{dataset_dsc},{dataset_cat},{count},{offset}, {region},{universe},{delay},{neutralize},{template}, {pool_size}, {sharp_1}, {fitness_1}, {sharp_2}, {fitness_2}")
         # 获取字段
         pc_fields = self.simulate_fields(region=region,universe=universe,delay=delay, dataset_id=dataset_id,count=count, offset=offset)
         if template:
@@ -117,14 +117,14 @@ class MachineMiner:
         sim_data_one_update = {"end_time": end_time_one_str}
         self.database.update_simulate_record(sim_data_one_update, sim_batch, 1)
         # 二阶运行
-        sec_res = self.simulate_run_second_order(start_time_one_str,end_time_one_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+        sec_res = self.simulate_run_second_order(start_time_one_str,end_time_one_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size, sharp_1, fitness_1)
         if (sec_res[0]==0):
             return
         # 三阶运行
-        self.simulate_run_third_order(start_time_one_str,sec_res[2],dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+        self.simulate_run_third_order(start_time_one_str,sec_res[2],dataset_prefix,sim_data_one, region,universe,neutralize, pool_size, sharp_2, fitness_2)
 
     # 根据一阶记录运行二阶和三阶
-    def simulate_run_next(self, batch_time, pool_size=7):
+    def simulate_run_next(self, batch_time, pool_size=7, sharp_1=0.5, fitness_1=0.4, sharp_2=1.4, fitness_2=0.7):
         sim_records = self.database.get_simulate_record_batch(batch_time)
         if(len(sim_records) == 0):
             self.logger.error(f"simulate_run_next batch_time:{batch_time} 没有查询到记录")
@@ -149,7 +149,7 @@ class MachineMiner:
             start_time_one_str = sim_data_one['start_time'].strftime("%Y-%m-%d %H:%M:%S")
             end_time_one_str = sim_data_one['end_time'].strftime("%Y-%m-%d %H:%M:%S")
             # 二阶运行
-            sec_res = self.simulate_run_second_order(start_time_one_str,end_time_one_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+            sec_res = self.simulate_run_second_order(start_time_one_str,end_time_one_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size, sharp_1, fitness_1)
             if (sec_res[0]==0):
                 return
             # 二阶运行时间
@@ -161,12 +161,12 @@ class MachineMiner:
             end_time_two_str = sim_data_two['end_time'].strftime("%Y-%m-%d %H:%M:%S")
         # 三阶运行
         print("3阶")
-        self.simulate_run_third_order(start_time_two_str,end_time_two_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size)
+        self.simulate_run_third_order(start_time_two_str,end_time_two_str,dataset_prefix,sim_data_one, region,universe,neutralize, pool_size, sharp_2, fitness_2)
     
 
-    def simulate_run_second_order(self, start_time_one_str,end_time_one_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7):
+    def simulate_run_second_order(self, start_time_one_str,end_time_one_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7, sharp_1=0.5, fitness_1=0.4):
         # 筛选一阶alpha
-        fo_tracker = self.brain.my_get_alphas(start_time_one_str.replace(" ","T"),end_time_one_str.replace(" ","T"), 0.5, 0.4, region, 100,"track", True, "")
+        fo_tracker = self.brain.my_get_alphas(start_time_one_str.replace(" ","T"),end_time_one_str.replace(" ","T"), sharp_1, fitness_1, region, 100,"track", True, "")
         if(len(fo_tracker)==0):
             self.logger.info("筛选一阶alpha数量：%s"%len(fo_tracker))
             return (len(fo_tracker),"","")
@@ -198,9 +198,9 @@ class MachineMiner:
         self.database.update_simulate_record(sim_data_update, sim_data["batch_time"], 2)
         return (len(so_alpha_list),start_time_str,end_time_str)
 
-    def simulate_run_third_order(self, start_time_sec_str,end_time_sec_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7):
+    def simulate_run_third_order(self, start_time_sec_str,end_time_sec_str,dataset_prefix,sim_data, region='USA',universe='TOP3000',neutralize='SUBINDUSTRY', pool_size=7, sharp_2=1.4, fitness_2=0.7):
         # 筛选2阶alpha
-        fo_tracker = self.brain.my_get_alphas(start_time_sec_str.replace(" ","T"),end_time_sec_str.replace(" ","T"), 1.4, 0.7, region, 100,"track", True, "")
+        fo_tracker = self.brain.my_get_alphas(start_time_sec_str.replace(" ","T"),end_time_sec_str.replace(" ","T"), sharp_2, fitness_2, region, 100,"track", True, "")
         if(len(fo_tracker)==0):
             self.logger.info("筛选2阶alpha数量：%s"%len(fo_tracker))
             return len(fo_tracker)
