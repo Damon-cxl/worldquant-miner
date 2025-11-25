@@ -600,7 +600,9 @@ class WorldQuantBrain:
                         if usage != "submit":
                             if (longCount + shortCount) > 100:
                                 if sharpe < -sharpe_th:
-                                    exp = "-%s"%exp
+                                    front_expression, last_part = self.split_financial_expression(field)
+                                    last_part = "-%s"%last_part
+                                    exp = "%s;%s"%(front_expression, last_part)
                                 if turnover > 0.7:
                                     decay=decay*4
                                 elif turnover > 0.6:
@@ -653,7 +655,10 @@ class WorldQuantBrain:
                             yearly_status = response.json()['records']
                             for year_data in yearly_status:
                                 if year_data[6] == 0:
-                                    zero_year_sharp += 1
+                                    if year_data[0] == "2021" or year_data[0] == "2022" or year_data[0] == "2023":
+                                        zero_year_sharp += 3
+                                    else:
+                                        zero_year_sharp += 1
                         else:
                             print(f"    获取alpha {rec['id']} 年度统计信息失败，状态码: {response.status_code}")
                     except Exception as e:
@@ -946,8 +951,11 @@ class WorldQuantBrain:
 
         for oe in open_events_all:
             for ee in exit_events:
-                alpha = "%s(%s, %s, %s)"%(op, oe, field, ee)
-                output.append(alpha)
+                front_expression, last_part = self.split_financial_expression(field)
+                last_part = "chen_signal=%s"%last_part
+                alpha = "%s(%s, %s, %s)"%(op, oe, last_part, ee)
+                f_alpha = "%s;%s"%(front_expression, alpha)
+                output.append(f_alpha)
         return output
      
     def ts_factory(self, op, field):
@@ -1199,17 +1207,29 @@ class WorldQuantBrain:
         for group in groups:
             if op.startswith("group_vector"):
                 for vector in vectors:
-                    alpha = "%s(%s,%s,densify(%s))"%(op, field, vector, group)
-                    output.append(alpha)
+                    front_expression, last_part = self.split_financial_expression(field)
+                    last_part = "chen_signal=%s"%last_part
+                    alpha = "%s(%s,%s,densify(%s))"%(op, last_part, vector, group)
+                    f_alpha = "%s;%s"%(front_expression, alpha)
+                    output.append(f_alpha)
             elif op.startswith("group_percentage"):
-                alpha = "%s(%s,densify(%s),percentage=0.5)"%(op, field, group)
-                output.append(alpha)
+                front_expression, last_part = self.split_financial_expression(field)
+                last_part = "chen_signal=%s"%last_part
+                alpha = "%s(%s,densify(%s),percentage=0.5)"%(op, last_part, group)
+                f_alpha = "%s;%s"%(front_expression, alpha)
+                output.append(f_alpha)
             elif op.startswith("group_mean"):
-                alpha = "%s(%s,1,densify(%s))"%(op, field, group)
-                output.append(alpha)
+                front_expression, last_part = self.split_financial_expression(field)
+                last_part = "chen_signal=%s"%last_part
+                alpha = "%s(%s,1,densify(%s))"%(op, last_part, group)
+                f_alpha = "%s;%s"%(front_expression, alpha)
+                output.append(f_alpha)
             else:
-                alpha = "%s(%s,densify(%s))"%(op, field, group)
-                output.append(alpha)
+                front_expression, last_part = self.split_financial_expression(field)
+                last_part = "chen_signal=%s"%last_part
+                alpha = "%s(%s,densify(%s))"%(op, last_part, group)
+                f_alpha = "%s;%s"%(front_expression, alpha)
+                output.append(f_alpha)
         
         return output
 
@@ -1238,3 +1258,39 @@ class WorldQuantBrain:
         
         self.logger.info(f"Created {len(pools)} pools with {batch_size} alphas per batch")
         return pools
+
+    def split_financial_expression(expression: str) -> Tuple[str, str]:
+        """
+        将金融数据表达式以分号分隔，取最后一部分和除去最后一部分的前面部分
+        
+        Args:
+            expression: 金融数据表达式字符串，以分号分隔
+            
+        Returns:
+            Tuple[str, str]: (前面部分, 最后一部分)
+        """
+        # 去除首尾空格
+        expression = expression.strip()
+        
+        # 如果表达式为空，返回空字符串
+        if not expression:
+            return "", ""
+        
+        # 使用分号分割表达式
+        parts = expression.split(';')
+        
+        # 去除每个部分的空格
+        parts = [part.strip() for part in parts if part.strip()]
+        
+        # 如果没有分号，整个表达式作为最后一部分
+        if len(parts) == 1:
+            return "", parts[0]
+        
+        # 最后一部分
+        last_part = parts[-1]
+        
+        # 前面部分（除去最后一部分）
+        front_parts = parts[:-1]
+        front_expression = ';'.join(front_parts)
+        
+        return front_expression, last_part
